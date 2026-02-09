@@ -314,6 +314,18 @@ export const Settings: React.FC = () => {
                                             {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
                                             {syncing ? 'Connecting...' : 'Update Cloud Settings'}
                                         </Button>
+                                        <Button
+                                            variant="secondary"
+                                            onClick={async () => {
+                                                const res = await window.electronAPI.db.syncNow();
+                                                if (res.success) alert('Cloud Sync Started!');
+                                                else alert('Sync failed: ' + res.error);
+                                            }}
+                                            className="w-full"
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            Sync Now (Manual)
+                                        </Button>
                                     </div>
                                 </div>
 

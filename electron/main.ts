@@ -509,6 +509,14 @@ ipcMain.handle('cloud:configure', async (_event, { intervalMinutes }) => {
 ipcMain.handle('db:query', async (_event, { model, method, args }) => {
     try {
         const result = await (prisma as any)[model][method](args);
+
+        // Auto-Trigger Cloud Sync for Sales
+        if (model === 'sale' && (method === 'create' || method === 'update')) {
+            console.log('Triggering real-time sync...');
+            // Don't await - run in background so UI isn't blocked
+            runCloudSync().catch(err => console.error('Cloud Sync Error:', err));
+        }
+
         return { success: true, data: result };
     } catch (error: any) {
         console.error('Database error:', error);
