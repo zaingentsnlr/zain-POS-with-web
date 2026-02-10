@@ -245,4 +245,37 @@ router.post('/inventory', async (req, res) => {
     }
 });
 
+// Cleanup Empty Placeholders
+router.post('/cleanup-placeholders', async (req, res) => {
+    try {
+        console.log('🧹 Cleanup: checking for empty placeholders...');
+
+        // 1. Find all Placeholder Products
+        const placeholders = await prisma.product.findMany({
+            where: {
+                name: { contains: '(Sync Placeholder)' }
+            },
+            include: {
+                variants: true
+            }
+        });
+
+        let deletedCount = 0;
+
+        for (const p of placeholders) {
+            if (p.variants.length === 0) {
+                await prisma.product.delete({ where: { id: p.id } });
+                deletedCount++;
+            }
+        }
+
+        console.log(`✅ Cleanup complete. Deleted ${deletedCount} placeholders.`);
+        res.json({ success: true, deleted: deletedCount, totalChecked: placeholders.length });
+
+    } catch (error: any) {
+        console.error('Cleanup error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
