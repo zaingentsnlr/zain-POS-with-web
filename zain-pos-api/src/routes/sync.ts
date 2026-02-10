@@ -18,29 +18,31 @@ router.post('/sales', async (req, res) => {
 
             if (sale.user) {
                 try {
+                    // Start by trying to ensure the user exists with the SAME ID as desktop
                     const syncedUser = await prisma.user.upsert({
                         where: { username: sale.user.username },
                         update: {
                             name: sale.user.name,
                             role: sale.user.role,
                             isActive: sale.user.isActive
-                            // We don't update password/audit logs to keep cloud secure/clean
                         },
                         create: {
+                            id: sale.user.id, // KEEP ID CONSISTENT
                             username: sale.user.username,
-                            password: sale.user.password || 'default123', // Fallback
+                            password: sale.user.password || 'default123',
                             name: sale.user.name,
                             role: sale.user.role,
                             isActive: sale.user.isActive
                         }
                     });
                     finalUserId = syncedUser.id;
-                } catch (e) {
-                    console.error('User sync failed for:', sale.user.username, e);
-                    // Fallback to default admin if user sync fails
-                    const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
-                    if (admin) finalUserId = admin.id;
+                } catch (e: any) {
+                    console.error('CRITICAL: User sync failed for:', sale.user.username, e);
+                    // If we can't sync the user, we can't sync the sale. Return specific error.
+                    throw new Error(`User Sync Failed for ${sale.user.username}: ${e.message}`);
                 }
+            } else {
+                console.warn(`Warning: Sale ${sale.billNo} has no user data attached.`);
             }
 
             // 2. Sync Sale
