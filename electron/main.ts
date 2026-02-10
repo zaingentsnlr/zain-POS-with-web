@@ -480,7 +480,7 @@ async function runCloudSync() {
 
         const sales = await prisma.sale.findMany({
             where: { status: 'COMPLETED' },
-            include: { items: true },
+            include: { items: true, user: true },
             orderBy: { createdAt: 'desc' },
             take: 100
         });

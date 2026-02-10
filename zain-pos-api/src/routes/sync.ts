@@ -13,9 +13,41 @@ router.post('/sales', async (req, res) => {
         console.log(`📡 Cloud receiving ${sales.length} sales...`);
 
         for (const sale of sales) {
+            // 1. Sync User first (to satisfy FK)
+            let finalUserId = sale.userId;
+
+            if (sale.user) {
+                try {
+                    const syncedUser = await prisma.user.upsert({
+                        where: { username: sale.user.username },
+                        update: {
+                            name: sale.user.name,
+                            role: sale.user.role,
+                            isActive: sale.user.isActive
+                            // We don't update password/audit logs to keep cloud secure/clean
+                        },
+                        create: {
+                            username: sale.user.username,
+                            password: sale.user.password || 'default123', // Fallback
+                            name: sale.user.name,
+                            role: sale.user.role,
+                            isActive: sale.user.isActive
+                        }
+                    });
+                    finalUserId = syncedUser.id;
+                } catch (e) {
+                    console.error('User sync failed for:', sale.user.username, e);
+                    // Fallback to default admin if user sync fails
+                    const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+                    if (admin) finalUserId = admin.id;
+                }
+            }
+
+            // 2. Sync Sale
             await prisma.sale.upsert({
                 where: { id: sale.id },
                 update: {
+                    userId: finalUserId, // Use resolved ID
                     status: sale.status,
                     grandTotal: sale.grandTotal,
                     updatedAt: new Date(sale.updatedAt)
@@ -23,7 +55,7 @@ router.post('/sales', async (req, res) => {
                 create: {
                     id: sale.id,
                     billNo: sale.billNo,
-                    userId: sale.userId,
+                    userId: finalUserId, // Use resolved ID
                     customerName: sale.customerName,
                     subtotal: sale.subtotal,
                     taxAmount: sale.taxAmount,
