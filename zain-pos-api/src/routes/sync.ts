@@ -215,6 +215,7 @@ router.post('/inventory', async (req, res) => {
                 await prisma.productVariant.upsert({
                     where: { id: v.id },
                     update: {
+                        productId: product.id, // CRITICAL: Move variant to the Real Product (detach from placeholder)
                         stock: v.stock,
                         sellingPrice: v.sellingPrice,
                         mrp: v.mrp,
