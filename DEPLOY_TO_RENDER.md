@@ -2,10 +2,17 @@
 
 Follow this guide to host your Dashboard and API on the cloud using Render.
 
-## ⚠️ Important Warning
-Since we are using a local database inside the project (`pos.db`), **your data will reset every time the server restarts** on the free plan.
-- To keep data permanently, you need a **Render Disk** (Paid) or a **PostgreSQL Database**.
-- For now, this guide sets up the **Free Version** (Good for testing).
+## 🗄️ Database Setup (Supabase)
+We need a **PostgreSQL Database** to store data permanently. We will use **Supabase** (Free).
+
+1.  **Go to [supabase.com](https://supabase.com)** and Sign Up.
+2.  Click **New Project**.
+3.  Enter a Name (e.g., `zain-pos-db`) and a **strong Password**.
+4.  Select a Region close to you (e.g., Mumbai).
+5.  Click **Create New Project** and wait for it to finish.
+6.  Go to **Project Settings > Data API**.
+7.  Copy the **URI / Connection String** (it looks like `postgresql://postgres.[ref]:[password]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres`).
+    - *Note: You will need to replace `[password]` with the password you created in step 3.*
 
 ---
 
@@ -42,7 +49,7 @@ Since we are using a local database inside the project (`pos.db`), **your data w
    - **Plan**: Free
 
 5. **Scroll down to "Environment Variables"** and add these:
-   - `DATABASE_URL` = `file:./pos.db`
+   - `DATABASE_URL` = `postgresql://...` (Paste your Supabase Connection String here)
    - `JWT_SECRET` = `supersecretkey123`
    - `CORS_ORIGIN` = `*`
    - `NODE_VERSION` = `20.11.0`
