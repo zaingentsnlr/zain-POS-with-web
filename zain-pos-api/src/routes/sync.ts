@@ -12,6 +12,80 @@ router.post('/sales', async (req, res) => {
 
         console.log(`📡 Cloud receiving ${sales.length} sales...`);
 
+        // ---------------------------------------------------------
+        // PRE-PROCESS: Ensure all referenced Products exist
+        // ---------------------------------------------------------
+        const allVariantIds = new Set<string>();
+        sales.forEach(sale => {
+            sale.items?.forEach((item: any) => {
+                if (item.variantId) allVariantIds.add(item.variantId);
+            });
+        });
+
+        if (allVariantIds.size > 0) {
+            const existingVariants = await prisma.productVariant.findMany({
+                where: { id: { in: Array.from(allVariantIds) } },
+                select: { id: true }
+            });
+
+            const existingVariantIds = new Set(existingVariants.map(v => v.id));
+            const missingVariantIds = Array.from(allVariantIds).filter(id => !existingVariantIds.has(id));
+
+            if (missingVariantIds.length > 0) {
+                console.log(`⚠️ Found ${missingVariantIds.length} missing variants. Creating placeholders...`);
+
+                // 1. Ensure a fallback category exists
+                const fallbackCategory = await prisma.category.upsert({
+                    where: { name: 'Unsynced Inventory' },
+                    update: {},
+                    create: { name: 'Unsynced Inventory' }
+                });
+
+                // 2. Create Placeholder Products & Variants
+                for (const variantId of missingVariantIds) {
+                    // Find the item details from the payload to make the placeholder meaningful
+                    let itemInfo: any = null;
+                    for (const s of sales) {
+                        itemInfo = s.items?.find((i: any) => i.variantId === variantId);
+                        if (itemInfo) break;
+                    }
+
+                    if (!itemInfo) continue; // Should not happen
+
+                    // Create/Find a placeholder product
+                    const productName = itemInfo.productName || 'Unknown Product';
+
+                    // We try to find a product by name first to avoid duplicates if possible, 
+                    // but since we don't have the original productId, we might create a duplicate if names match.
+                    // Ideally we should assume it's a new placeholder product relative to this variant.
+
+                    const product = await prisma.product.create({
+                        data: {
+                            name: productName + ' (Sync Placeholder)',
+                            categoryId: fallbackCategory.id,
+                            taxRate: itemInfo.taxRate || 0,
+                            description: 'Created automatically during sales sync'
+                        }
+                    });
+
+                    await prisma.productVariant.create({
+                        data: {
+                            id: variantId, // CRITICAL: Use the exact ID from desktop
+                            productId: product.id,
+                            sku: `SYNC-${variantId.substring(0, 8)}`,
+                            barcode: `SYNC-${variantId.substring(0, 8)}`, // Temporary barcode
+                            mrp: itemInfo.mrp || 0,
+                            sellingPrice: itemInfo.sellingPrice || 0,
+                            costPrice: 0,
+                            stock: 0
+                        }
+                    });
+                }
+                console.log('✅ Placeholders created.');
+            }
+        }
+        // ---------------------------------------------------------
+
         for (const sale of sales) {
             // 1. Sync User first (to satisfy FK)
             let finalUserId = sale.userId;
