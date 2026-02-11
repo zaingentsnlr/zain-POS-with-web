@@ -99,4 +99,45 @@ router.get('/hourly', async (req, res) => {
     }
 });
 
+// Get payment mode audit for today
+router.get('/audit-payment-modes', async (req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const sales = await prisma.sale.findMany({
+            where: {
+                createdAt: { gte: today },
+                status: 'COMPLETED'
+            },
+            select: {
+                id: true,
+                billNo: true,
+                grandTotal: true,
+                paymentMethod: true,
+                createdAt: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Group by payment mode
+        const audit: Record<string, any[]> = {
+            'CASH': [],
+            'UPI': [],
+            'CARD': []
+        };
+
+        sales.forEach(sale => {
+            const mode = sale.paymentMethod || 'CASH';
+            if (!audit[mode]) audit[mode] = [];
+            audit[mode].push(sale);
+        });
+
+        res.json(audit);
+    } catch (error) {
+        console.error('Audit error:', error);
+        res.status(500).json({ error: 'Failed to fetch payment audit' });
+    }
+});
+
 export default router;

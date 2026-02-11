@@ -3,7 +3,7 @@ const axios = require('axios');
 const readline = require('readline');
 
 // Hardcode or read from env if possible, but for this script we can default to prod URL
-const API_URL = 'https://zain-pos-with-web.onrender.com';
+const API_URL = 'https://zain-pos-desktop.onrender.com';
 const MAINTENANCE_SECRET = 'zain-pos-maintenance-secret';
 
 const rl = readline.createInterface({
