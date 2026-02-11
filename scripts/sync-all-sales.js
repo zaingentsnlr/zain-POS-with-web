@@ -7,16 +7,18 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const prisma = new PrismaClient();
+const TARGET_URL = 'https://zain-pos-api.onrender.com';
 
 async function syncAllSales() {
     console.log('--- STARTING FULL SALES HISTORY SYNC ---');
 
-    // 1. Get Settings
-    const setting = await prisma.setting.findUnique({ where: { key: 'CLOUD_API_URL' } });
-    const apiUrl = setting?.value;
-    const targetUrl = apiUrl || 'https://zain-pos-desktop.onrender.com';
-
-    console.log(`Target Cloud URL: ${targetUrl}`);
+    // 1. Force Update Cloud URL Setting
+    console.log(`Setting Cloud API URL to: ${TARGET_URL}`);
+    await prisma.setting.upsert({
+        where: { key: 'CLOUD_API_URL' },
+        update: { value: TARGET_URL },
+        create: { key: 'CLOUD_API_URL', value: TARGET_URL }
+    });
 
     // 2. Count Total Sales
     const totalCount = await prisma.sale.count({ where: { status: 'COMPLETED' } });
@@ -27,7 +29,7 @@ async function syncAllSales() {
         return;
     }
 
-    // 3. Sync in Chunks of 10 to avoid payload limits
+    // 3. Sync in Chunks of 10
     const CHUNK_SIZE = 10;
     const chunks = Math.ceil(totalCount / CHUNK_SIZE);
 
@@ -47,7 +49,7 @@ async function syncAllSales() {
         console.log(`  > Sending ${sales.length} records...`);
 
         try {
-            await axios.post(`${targetUrl}/api/sync/sales`, { sales }, {
+            await axios.post(`${TARGET_URL}/api/sync/sales`, { sales }, {
                 headers: { 'Content-Type': 'application/json' }
             });
             console.log('  ✅ Batch Success');
@@ -61,7 +63,7 @@ async function syncAllSales() {
             }
         }
 
-        // Small delay to be nice to the server
+        // Small delay
         await new Promise(r => setTimeout(r, 500));
     }
 
