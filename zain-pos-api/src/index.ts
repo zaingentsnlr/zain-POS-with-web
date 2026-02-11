@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
+import { initSocket } from './socket';
 import authRoutes from './routes/auth';
 import salesRoutes from './routes/sales';
 import inventoryRoutes from './routes/inventory';
@@ -12,6 +14,9 @@ import syncRoutes from './routes/sync';
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app); // Create HTTP server
+const io = initSocket(httpServer); // Initialize Socket.IO
+
 const PORT = process.env.PORT || 3001;
 
 // Middleware
@@ -50,6 +55,6 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     res.status(500).json({ error: 'Something went wrong!', message: err.message });
 });
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
     console.log(`🚀 API server running on http://localhost:${PORT}`);
 });

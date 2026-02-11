@@ -3,6 +3,7 @@ import { DollarSign, ShoppingCart, TrendingUp, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../lib/api';
 import StatCard from '../components/StatCard';
+import { socket } from '../lib/socket';
 
 interface SalesSummary {
     totalSales: number;
@@ -23,6 +24,17 @@ export default function Dashboard() {
 
     useEffect(() => {
         fetchData();
+
+        // Real-time update
+        function onSaleCreated() {
+            fetchData();
+        }
+
+        socket.on('sale:created', onSaleCreated);
+
+        return () => {
+            socket.off('sale:created', onSaleCreated);
+        };
     }, []);
 
     const fetchData = async () => {
@@ -57,7 +69,7 @@ export default function Dashboard() {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
                     title="Today's Sales"
                     value={`₹${summary?.totalSales.toLocaleString() || 0}`}

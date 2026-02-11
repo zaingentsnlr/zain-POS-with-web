@@ -86,10 +86,39 @@ function AppRoutes() {
   );
 }
 
+
+import { Toaster, toast } from 'react-hot-toast';
+import { socket } from './lib/socket';
+import { useEffect } from 'react';
+
+// Global Socket Listener Component
+function SocketListener() {
+  useEffect(() => {
+    function onSaleCreated(data: any) {
+      console.log('socket event:', data);
+      toast.success(`New Sale! (Items: ${data.count || 1})`, {
+        position: 'top-right',
+        duration: 4000,
+        icon: '💰'
+      });
+    }
+
+    socket.on('sale:created', onSaleCreated);
+
+    return () => {
+      socket.off('sale:created', onSaleCreated);
+    };
+  }, []);
+
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Toaster />
+        <SocketListener />
         <AppRoutes />
       </AuthProvider>
     </BrowserRouter>

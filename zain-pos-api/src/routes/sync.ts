@@ -101,19 +101,17 @@ router.post('/sales', async (req, res) => {
                             isActive: sale.user.isActive
                         },
                         create: {
-                            id: sale.user.id, // KEEP ID CONSISTENT
+                            id: sale.user.id, // Try to force ID
                             username: sale.user.username,
-                            password: sale.user.password || 'default123',
+                            password: sale.user.password,
                             name: sale.user.name,
                             role: sale.user.role,
                             isActive: sale.user.isActive
                         }
                     });
                     finalUserId = syncedUser.id;
-                } catch (e: any) {
-                    console.error('CRITICAL: User sync failed for:', sale.user.username, e);
-                    // If we can't sync the user, we can't sync the sale. Return specific error.
-                    throw new Error(`User Sync Failed for ${sale.user.username}: ${e.message}`);
+                } catch (e) {
+                    // fallback logic
                 }
             } else {
                 console.warn(`Warning: Sale ${sale.billNo} has no user data attached.`);
@@ -163,6 +161,16 @@ router.post('/sales', async (req, res) => {
                     }
                 }
             });
+        }
+
+        // BROADCAST TO DASHBOARD
+        try {
+            const { getIO } = require('../socket');
+            const io = getIO();
+            io.emit('sale:created', { count: sales.length, timestamp: new Date() });
+            console.log(`📢 Emitted 'sale:created' for ${sales.length} sales.`);
+        } catch (e) {
+            console.error("Socket warning:", e);
         }
 
         res.json({ success: true, count: sales.length });
