@@ -1310,7 +1310,15 @@ ipcMain.handle('cloud:syncNow', async () => {
 
         cloudSync.setApiUrl(setting.value);
 
-        // 2. Fetch all products with relations
+        // 2. Sync Settings (Store Info, etc.)
+        const allSettings = await prisma.setting.findMany();
+        await cloudSync.syncSettings(allSettings);
+
+        // 3. Sync Users
+        const users = await prisma.user.findMany();
+        await cloudSync.syncUsers(users);
+
+        // 4. Fetch all products with relations
         const products = await prisma.product.findMany({
             include: {
                 category: true,
@@ -1319,12 +1327,12 @@ ipcMain.handle('cloud:syncNow', async () => {
         });
         await cloudSync.syncInventory(products);
 
-        // 3. Fetch recent sales (e.g., last 30 days or all)
+        // 5. Fetch recent sales (e.g., last 30 days or all)
         const sales = await prisma.sale.findMany({
             where: { status: 'COMPLETED' },
-            include: { items: true },
+            include: { items: true, user: true }, // Include User for sync
             orderBy: { createdAt: 'desc' },
-            take: 500 // Limit to avoid massive payloads
+            take: 10000 // Increased limit for full history
         });
         await cloudSync.syncSales(sales);
 

@@ -36,6 +36,34 @@ class CloudSyncService {
             return { success: false, error: error.message };
         }
     }
+
+    async syncSettings(settings: any[]) {
+        if (!this.apiUrl) return;
+        try {
+            console.log(`Syncing ${settings.length} settings to cloud...`);
+            await axios.post(`${this.apiUrl}/api/sync/settings`, { settings }, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            return { success: true };
+        } catch (error: any) {
+            console.error('Settings sync failed:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async syncUsers(users: any[]) {
+        if (!this.apiUrl) return;
+        try {
+            console.log(`Syncing ${users.length} users to cloud...`);
+            await axios.post(`${this.apiUrl}/api/sync/users`, { users }, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            return { success: true };
+        } catch (error: any) {
+            console.error('Users sync failed:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
 }
 
 export const cloudSync = new CloudSyncService();

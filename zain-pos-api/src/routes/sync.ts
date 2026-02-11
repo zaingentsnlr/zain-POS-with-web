@@ -28,7 +28,7 @@ router.post('/sales', async (req, res) => {
                 select: { id: true }
             });
 
-            const existingVariantIds = new Set(existingVariants.map(v => v.id));
+            const existingVariantIds = new Set(existingVariants.map((v: any) => v.id));
             const missingVariantIds = Array.from(allVariantIds).filter(id => !existingVariantIds.has(id));
 
             if (missingVariantIds.length > 0) {
@@ -345,6 +345,34 @@ router.post('/cleanup-placeholders', async (req, res) => {
 
     } catch (error: any) {
         console.error('Cleanup error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Sync Settings from Desktop
+router.post('/settings', async (req, res) => {
+    try {
+        const { settings } = req.body;
+        if (!Array.isArray(settings)) return res.status(400).json({ error: 'Invalid data' });
+
+        console.log(`📡 Cloud receiving ${settings.length} settings...`);
+
+        for (const setting of settings) {
+            await prisma.setting.upsert({
+                where: { key: setting.key },
+                update: {
+                    value: setting.value
+                },
+                create: {
+                    key: setting.key,
+                    value: setting.value
+                }
+            });
+        }
+
+        res.json({ success: true, count: settings.length });
+    } catch (error: any) {
+        console.error('Settings sync error:', error);
         res.status(500).json({ error: error.message });
     }
 });

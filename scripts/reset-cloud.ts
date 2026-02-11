@@ -1,7 +1,7 @@
 
-import axios from 'axios';
-import dotenv from 'dotenv';
-import readline from 'readline';
+const axios = require('axios');
+const dotenv = require('dotenv');
+const readline = require('readline');
 
 dotenv.config();
 

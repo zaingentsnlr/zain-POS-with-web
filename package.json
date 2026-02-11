@@ -15,7 +15,8 @@
     "electron:build": "vite build && electron-builder",
     "postinstall": "prisma generate",
     "import": "ts-node scripts/import-from-excel.ts",
-    "test-sync": "ts-node scripts/test-sync.ts"
+    "test-sync": "ts-node scripts/test-sync.ts",
+    "reset-cloud": "ts-node scripts/reset-cloud.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
