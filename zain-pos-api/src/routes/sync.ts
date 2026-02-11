@@ -246,7 +246,7 @@ router.post('/inventory', async (req, res) => {
                     data: {
                         taxRate: p.taxRate,
                         hsn: p.hsn,
-                        isActive: true // Revive if deleted
+                        isActive: p.isActive // Respect Desktop status
                     }
                 });
             } else {
@@ -256,7 +256,7 @@ router.post('/inventory', async (req, res) => {
                         categoryId: category.id,
                         taxRate: p.taxRate,
                         hsn: p.hsn,
-                        isActive: true
+                        isActive: p.isActive ?? true
                     }
                 });
             }
@@ -277,7 +277,7 @@ router.post('/inventory', async (req, res) => {
                         size: v.size,
                         color: v.color,
                         costPrice: v.costPrice,
-                        isActive: true // Revive
+                        isActive: v.isActive // Respect Desktop status
                     },
                     create: {
                         id: v.id,
@@ -290,7 +290,7 @@ router.post('/inventory', async (req, res) => {
                         sellingPrice: v.sellingPrice,
                         costPrice: v.costPrice || 0,
                         stock: v.stock,
-                        isActive: true
+                        isActive: v.isActive ?? true
                     }
                 });
             }
