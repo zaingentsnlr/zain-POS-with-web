@@ -25,7 +25,25 @@ async function syncUsers() {
     // 2. Send to Cloud
     try {
         console.log(`Sending ${users.length} users...`);
-        await axios.post(`${TARGET_URL}/api/sync/users`, { users }, {
+
+        // HASH PASSWORDS IF NEEDED
+        // The desktop app uses cleartext, but Cloud API expects Hash.
+        const bcrypt = require('bcryptjs');
+
+        const usersToSync = await Promise.all(users.map(async (u) => {
+            let password = u.password;
+            // If it doesn't look like a bcrypt hash, hash it.
+            if (!password.startsWith('$2')) {
+                console.log(`Hashing password for ${u.username}...`);
+                password = await bcrypt.hash(password, 10);
+            }
+            return {
+                ...u,
+                password: password
+            };
+        }));
+
+        await axios.post(`${TARGET_URL}/api/sync/users`, { users: usersToSync }, {
             headers: { 'Content-Type': 'application/json' }
         });
         console.log('✅ User Sync Success!');
