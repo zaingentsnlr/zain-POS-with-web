@@ -28,7 +28,7 @@ router.post('/reset', async (req, res) => {
         // 1. Transactional Data
         await prisma.saleItem.deleteMany({});
         await prisma.sale.deleteMany({});
-        await prisma.invoice.deleteMany({}); // If exists
+        // await prisma.invoice.deleteMany({}); // Model does not exist
         await prisma.inventoryMovement.deleteMany({});
         await prisma.auditLog.deleteMany({});
 
