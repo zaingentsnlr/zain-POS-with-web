@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -9,7 +9,9 @@ import {
     BarChart3,
     LogOut,
     Menu,
-    X
+    X,
+    Sun,
+    Moon
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -18,9 +20,21 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [darkMode, setDarkMode] = useState(false);
+
     const { user, logout } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
+
+    // Dark Mode Effect
+    useEffect(() => {
+        if (darkMode) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }, [darkMode]);
 
     const navigation = [
         { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -36,130 +50,127 @@ export default function Layout({ children }: LayoutProps) {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Mobile Header */}
-            <div className="lg:hidden bg-white border-b border-gray-200 sticky top-0 z-50">
-                <div className="flex items-center justify-between p-4">
-                    <h1 className="text-xl font-bold text-gray-900">Zain POS</h1>
+        <div className="flex h-screen bg-gray-50 dark:bg-dark-bg">
+            {/* Desktop Sidebar (Collapsible) */}
+            <aside
+                className={`hidden lg:flex ${sidebarOpen ? 'w-64' : 'w-20'} bg-white dark:bg-dark-card border-r border-gray-200 dark:border-dark-border transition-all duration-300 flex-col fixed inset-y-0 z-20`}
+            >
+                {/* Logo */}
+                <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-dark-border">
+                    {sidebarOpen && (
+                        <h1 className="text-xl font-bold gradient-primary bg-clip-text text-transparent truncate">
+                            Zain POS
+                        </h1>
+                    )}
                     <button
-                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        className="p-2 rounded-lg hover:bg-gray-100"
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg mx-auto lg:mx-0"
                     >
-                        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                     </button>
                 </div>
 
-                {/* Mobile Menu */}
-                {mobileMenuOpen && (
-                    <div className="border-t border-gray-200">
-                        <nav className="p-4 space-y-2">
-                            {navigation.map((item) => {
-                                const Icon = item.icon;
-                                const isActive = location.pathname === item.href;
-                                return (
-                                    <Link
-                                        key={item.name}
-                                        to={item.href}
-                                        onClick={() => setMobileMenuOpen(false)}
-                                        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                                            ? 'bg-primary-50 text-primary-700'
-                                            : 'text-gray-700 hover:bg-gray-100'
-                                            }`}
-                                    >
-                                        <Icon size={20} />
-                                        <span className="font-medium">{item.name}</span>
-                                    </Link>
-                                );
-                            })}
-                            <button
-                                onClick={handleLogout}
-                                className="flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 w-full"
+                {/* Navigation */}
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                    {navigation.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location.pathname === item.href;
+
+                        return (
+                            <Link
+                                key={item.name}
+                                to={item.href}
+                                className={isActive ? 'sidebar-link-active' : 'sidebar-link'}
+                                title={!sidebarOpen ? item.name : ''}
                             >
-                                <LogOut size={20} />
-                                <span className="font-medium">Logout</span>
-                            </button>
-                        </nav>
-                    </div>
-                )}
-            </div>
+                                <Icon className="w-5 h-5 flex-shrink-0" />
+                                {sidebarOpen && <span>{item.name}</span>}
+                            </Link>
+                        );
+                    })}
+                </nav>
 
-            {/* Desktop Sidebar */}
-            <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
-                <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
-                    <div className="flex items-center h-16 px-6 border-b border-gray-200">
-                        <h1 className="text-xl font-bold text-gray-900">Zain POS</h1>
-                    </div>
+                {/* User Info & Logout */}
+                <div className="p-4 border-t border-gray-200 dark:border-dark-border">
+                    {sidebarOpen && (
+                        <div className="mb-3">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                {user?.name || user?.username}
+                            </p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 capitalize">
+                                {user?.role}
+                            </p>
+                        </div>
+                    )}
+                    <button
+                        onClick={handleLogout}
+                        className="sidebar-link w-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        title={!sidebarOpen ? 'Logout' : ''}
+                    >
+                        <LogOut className="w-5 h-5 flex-shrink-0" />
+                        {sidebarOpen && <span>Logout</span>}
+                    </button>
+                </div>
+            </aside>
 
-                    <nav className="flex-1 px-4 py-4 space-y-2">
-                        {navigation.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = location.pathname === item.href;
-                            return (
-                                <Link
-                                    key={item.name}
-                                    to={item.href}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                                        ? 'bg-primary-50 text-primary-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
-                                        }`}
-                                >
-                                    <Icon size={20} />
-                                    <span className="font-medium">{item.name}</span>
-                                </Link>
-                            );
-                        })}
-                    </nav>
+            {/* Main Content Area */}
+            <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}`}>
 
-                    <div className="p-4 border-t border-gray-200">
-                        <div className="flex items-center gap-3 px-4 py-3 mb-2">
-                            <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-                                <span className="text-primary-700 font-semibold">
-                                    {user?.username.charAt(0).toUpperCase()}
-                                </span>
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">{user?.username}</p>
-                                <p className="text-xs text-gray-500">{user?.role}</p>
+                {/* Mobile Header (Only visible on small screens) */}
+                <div className="lg:hidden bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border h-16 flex items-center justify-between px-4 sticky top-0 z-30">
+                    <h1 className="text-xl font-bold gradient-primary bg-clip-text text-transparent">Zain POS</h1>
+                    <button onClick={() => setDarkMode(!darkMode)} className="p-2">
+                        {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                    </button>
+                </div>
+
+                {/* Desktop Header */}
+                <header className="hidden lg:flex h-16 bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border items-center justify-between px-6">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                        {navigation.find((item) => item.href === location.pathname)?.name || 'Dashboard'}
+                    </h2>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setDarkMode(!darkMode)}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                        </button>
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold">
+                                {user?.username?.charAt(0).toUpperCase()}
                             </div>
                         </div>
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 w-full"
-                        >
-                            <LogOut size={20} />
-                            <span className="font-medium">Logout</span>
-                        </button>
                     </div>
-                </div>
-            </div>
+                </header>
 
-            {/* Main Content */}
-            <div className="lg:pl-64">
-                <main className="p-4 lg:p-8">
+                <main className="flex-1 overflow-y-auto p-4 lg:p-8 bg-gray-50 dark:bg-dark-bg pb-20 lg:pb-8">
                     {children}
                 </main>
             </div>
 
-            {/* Mobile Bottom Navigation */}
-            <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 z-50">
+            {/* Mobile Bottom Navigation (Sticky) */}
+            <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white dark:bg-dark-card border-t border-gray-200 dark:border-dark-border z-30 pb-safe">
                 <nav className="flex justify-around p-2">
-                    {navigation.slice(0, 4).map((item) => {
+                    {navigation.map((item) => {
                         const Icon = item.icon;
                         const isActive = location.pathname === item.href;
                         return (
                             <Link
                                 key={item.name}
                                 to={item.href}
-                                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${isActive
-                                    ? 'text-primary-700'
-                                    : 'text-gray-500'
+                                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'
                                     }`}
                             >
                                 <Icon size={20} />
-                                <span className="text-xs font-medium">{item.name}</span>
+                                <span className="text-[10px] font-medium">{item.name}</span>
                             </Link>
                         );
                     })}
+                    <button onClick={handleLogout} className="flex flex-col items-center gap-1 px-3 py-2 text-gray-500">
+                        <LogOut size={20} />
+                        <span className="text-[10px] font-medium">Exit</span>
+                    </button>
                 </nav>
             </div>
         </div>
