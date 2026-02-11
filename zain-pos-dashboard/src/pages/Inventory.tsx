@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Package, AlertTriangle, Search, Filter } from 'lucide-react';
+import { Search } from 'lucide-react';
 import api from '../lib/api';
 
 interface Product {

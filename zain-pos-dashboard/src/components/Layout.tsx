@@ -19,7 +19,6 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [darkMode, setDarkMode] = useState(false);
 
