@@ -172,6 +172,40 @@ router.post('/sales', async (req, res) => {
     }
 });
 
+// Sync Users from Desktop
+router.post('/users', async (req, res) => {
+    try {
+        const { users } = req.body;
+        if (!Array.isArray(users)) return res.status(400).json({ error: 'Invalid data' });
+
+        console.log(`📡 Cloud receiving ${users.length} users...`);
+
+        for (const user of users) {
+            await prisma.user.upsert({
+                where: { username: user.username },
+                update: {
+                    name: user.name,
+                    role: user.role,
+                    password: user.password, // Syncing hashed password
+                    isActive: user.isActive
+                },
+                create: {
+                    username: user.username,
+                    name: user.name,
+                    role: user.role,
+                    password: user.password,
+                    isActive: user.isActive
+                }
+            });
+        }
+        console.log('✅ Users synced.');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('User Sync Error:', error);
+        res.status(500).json({ error: 'Sync failed' });
+    }
+});
+
 // Sync Inventory from Desktop
 router.post('/inventory', async (req, res) => {
     try {
