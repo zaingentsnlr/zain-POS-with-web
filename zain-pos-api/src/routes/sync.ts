@@ -220,6 +220,9 @@ router.post('/inventory', async (req, res) => {
         const { products } = req.body;
         if (!Array.isArray(products)) return res.status(400).json({ error: 'Invalid data' });
 
+        console.log(`📦 Syncing ${products.length} products...`);
+        const receivedVariantIds: string[] = [];
+
         for (const p of products) {
             // 1. Sync Category
             const category = await prisma.category.upsert({
@@ -228,7 +231,11 @@ router.post('/inventory', async (req, res) => {
                 create: { name: p.category.name }
             });
 
-            // 2. Sync Product (Prisma doesn't have @unique on name, so we use findFirst + create/update)
+            // 2. Sync Product
+            // Use ID if provided and matches, otherwise fallback to name mapping (careful of ID shifts)
+            // Ideally we should sync Product IDs too if they match UUID format.
+            // But for now, we trust the name+category uniqueness or try to match.
+
             let product = await prisma.product.findFirst({
                 where: { name: p.name, categoryId: category.id }
             });
@@ -238,7 +245,8 @@ router.post('/inventory', async (req, res) => {
                     where: { id: product.id },
                     data: {
                         taxRate: p.taxRate,
-                        hsn: p.hsn
+                        hsn: p.hsn,
+                        isActive: true // Revive if deleted
                     }
                 });
             } else {
@@ -247,22 +255,29 @@ router.post('/inventory', async (req, res) => {
                         name: p.name,
                         categoryId: category.id,
                         taxRate: p.taxRate,
-                        hsn: p.hsn
+                        hsn: p.hsn,
+                        isActive: true
                     }
                 });
             }
 
             // 3. Sync Variants
             for (const v of p.variants) {
+                receivedVariantIds.push(v.id);
+
                 await prisma.productVariant.upsert({
                     where: { id: v.id },
                     update: {
-                        productId: product.id, // CRITICAL: Move variant to the Real Product (detach from placeholder)
+                        productId: product.id,
                         stock: v.stock,
                         sellingPrice: v.sellingPrice,
                         mrp: v.mrp,
                         barcode: v.barcode,
-                        sku: v.sku
+                        sku: v.sku,
+                        size: v.size,
+                        color: v.color,
+                        costPrice: v.costPrice,
+                        isActive: true // Revive
                     },
                     create: {
                         id: v.id,
@@ -273,14 +288,28 @@ router.post('/inventory', async (req, res) => {
                         color: v.color,
                         mrp: v.mrp,
                         sellingPrice: v.sellingPrice,
-                        costPrice: v.costPrice,
-                        stock: v.stock
+                        costPrice: v.costPrice || 0,
+                        stock: v.stock,
+                        isActive: true
                     }
                 });
             }
         }
 
-        res.json({ success: true });
+        // 4. SOFT DELETE Missing Items (Pruning)
+        // If a variant is NOT in the received list, it means it was deleted on Desktop.
+        if (receivedVariantIds.length > 0) {
+            const result = await prisma.productVariant.updateMany({
+                where: {
+                    id: { notIn: receivedVariantIds },
+                    isActive: true
+                },
+                data: { isActive: false, stock: 0 }
+            });
+            console.log(`🧹 Archived ${result.count} stale variants.`);
+        }
+
+        res.json({ success: true, count: products.length });
     } catch (error: any) {
         console.error('Inventory sync error:', error);
         res.status(500).json({ error: error.message });
