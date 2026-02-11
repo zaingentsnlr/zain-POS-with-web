@@ -83,6 +83,9 @@ export default function Login() {
 
                 <div className="mt-6 text-center text-sm text-gray-600">
                     <p>Default: admin / admin123</p>
+                    <p className="text-xs text-gray-400 mt-2">
+                        API: {import.meta.env.VITE_API_URL || 'Not Set (Localhost)'}
+                    </p>
                 </div>
             </div>
         </div>
