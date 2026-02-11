@@ -7,7 +7,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const prisma = new PrismaClient();
-const TARGET_URL = 'https://zain-pos-api.onrender.com';
+const TARGET_URL = 'https://zain-pos-desktop.onrender.com';
 
 async function syncAllInventory() {
     console.log('--- STARTING FULL INVENTORY SYNC ---');
