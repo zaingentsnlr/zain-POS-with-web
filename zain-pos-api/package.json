@@ -8,8 +8,8 @@
         "build": "npx prisma generate && tsc",
         "start": "node dist/index.js",
         "prisma:generate": "prisma generate",
-        "migrate": "prisma migrate deploy",
-        "postinstall": "prisma generate && prisma migrate deploy"
+        "migrate": "npx prisma db push",
+        "postinstall": "npx prisma generate && npx prisma db push"
     },
     "keywords": [
         "pos",
