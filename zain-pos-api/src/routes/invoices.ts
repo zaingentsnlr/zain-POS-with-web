@@ -10,7 +10,7 @@ router.use(authMiddleware);
 // Get recent sales (invoices)
 router.get('/', async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit as string) || 50;
+        const limit = parseInt(req.query.limit as string) || 500;
         const page = parseInt(req.query.page as string) || 1;
         const skip = (page - 1) * limit;
 

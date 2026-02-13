@@ -4,6 +4,7 @@ import api from '../lib/api';
 
 interface Invoice {
     id: string;
+    billNo: number;
     total: number;
     createdAt: string;
     customer: {
@@ -132,7 +133,7 @@ export default function Invoices() {
                     <tbody>
                         {filteredInvoices.map((invoice) => (
                             <tr key={invoice.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="py-3 px-4 text-sm font-medium text-gray-900">#{invoice.id}</td>
+                                <td className="py-3 px-4 text-sm font-medium text-gray-900">#{invoice.billNo}</td>
                                 <td className="py-3 px-4">
                                     <div>
                                         <p className="text-sm font-medium text-gray-900">{invoice.customer.name}</p>
@@ -178,7 +179,7 @@ export default function Invoices() {
                     <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">Invoice #{selectedInvoice.id}</h2>
+                                <h2 className="text-2xl font-bold text-gray-900">Invoice #{selectedInvoice.billNo}</h2>
                                 <button
                                     onClick={() => setSelectedInvoice(null)}
                                     className="p-2 hover:bg-gray-100 rounded-lg"
