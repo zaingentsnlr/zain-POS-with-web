@@ -111,10 +111,30 @@ router.post('/sales', async (req, res) => {
                     });
                     finalUserId = syncedUser.id;
                 } catch (e) {
-                    // fallback logic
+                    console.warn(`Failed to sync user ${sale.user.username} for sale ${sale.billNo}, trying fallback...`);
                 }
             } else {
                 console.warn(`Warning: Sale ${sale.billNo} has no user data attached.`);
+            }
+
+            // Verify if finalUserId exists, if not, fallback to any Admin
+            const userExists = await prisma.user.findUnique({ where: { id: finalUserId } });
+            if (!userExists) {
+                console.warn(`User ID ${finalUserId} not found for sale ${sale.billNo}. Assigning to fallback Admin.`);
+                let admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+                if (!admin) {
+                    // Create a default admin if absolutely no users exist
+                    admin = await prisma.user.create({
+                        data: {
+                            username: 'admin',
+                            password: 'admin123',
+                            name: 'System Admin',
+                            role: 'ADMIN',
+                            isActive: true
+                        }
+                    });
+                }
+                finalUserId = admin.id;
             }
 
             // 2. Sync Sale

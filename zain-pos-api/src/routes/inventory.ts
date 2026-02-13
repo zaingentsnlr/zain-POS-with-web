@@ -20,15 +20,29 @@ router.get('/products', async (req, res) => {
         });
 
         // Flatten products and variants for simpler dashboard view
-        const flattened = products.flatMap(product =>
-            product.variants.filter(v => v.isActive).map(variant => ({
+        const flattened = products.flatMap(product => {
+            const activeVariants = product.variants.filter(v => v.isActive);
+
+            if (activeVariants.length === 0) {
+                // Return product as a single item if no active variants exist
+                return [{
+                    id: product.id,
+                    name: product.name,
+                    price: 0,
+                    stock: 0,
+                    category: product.category,
+                    status: 'No Variants'
+                }];
+            }
+
+            return activeVariants.map(variant => ({
                 id: `${product.id}-${variant.id}`,
                 name: product.name + (variant.size ? ` (${variant.size}${variant.color ? ` ${variant.color}` : ''})` : ''),
                 price: variant.sellingPrice,
                 stock: variant.stock,
                 category: product.category
-            }))
-        );
+            }));
+        });
 
         res.json(flattened);
     } catch (error) {
