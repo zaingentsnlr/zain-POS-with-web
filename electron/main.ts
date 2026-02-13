@@ -485,6 +485,15 @@ async function runCloudSync() {
             take: 100
         });
         await cloudSync.syncSales(sales);
+
+        // Sync Audit Logs
+        const auditLogs = await prisma.auditLog.findMany({
+            include: { user: true },
+            take: 100,
+            orderBy: { createdAt: 'desc' }
+        });
+        await cloudSync.syncAuditLogs(auditLogs);
+
         console.log('✅ Background Cloud Sync Complete');
     } catch (e) {
         console.error('Background Sync Failed:', e);

@@ -11,7 +11,9 @@ import {
     Menu,
     X,
     Sun,
-    Moon
+    Moon,
+    Activity,
+    Bell
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -41,6 +43,7 @@ export default function Layout({ children }: LayoutProps) {
         { name: 'Inventory', href: '/inventory', icon: Package },
         { name: 'Invoices', href: '/invoices', icon: FileText },
         { name: 'Reports', href: '/reports', icon: BarChart3 },
+        { name: 'Activity', href: '/activity', icon: Activity },
     ];
 
     const handleLogout = () => {
@@ -129,6 +132,12 @@ export default function Layout({ children }: LayoutProps) {
                         {navigation.find((item) => item.href === location.pathname)?.name || 'Dashboard'}
                     </h2>
                     <div className="flex items-center gap-4">
+                        <Link to="/activity" className="relative p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors group" title="Notifications">
+                            <Bell className="w-5 h-5 text-gray-600 dark:text-gray-300 group-hover:text-primary-600" />
+                            {/* Simple dot for now, ideally connected to real unread state */}
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+                        </Link>
+
                         <button
                             onClick={() => setDarkMode(!darkMode)}
                             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"

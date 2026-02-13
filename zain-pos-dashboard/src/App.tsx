@@ -7,6 +7,7 @@ import Sales from './pages/Sales';
 import Inventory from './pages/Inventory';
 import Invoices from './pages/Invoices';
 import Reports from './pages/Reports';
+import ActivityPage from './pages/Activity';
 import './index.css';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -78,6 +79,16 @@ function AppRoutes() {
           <PrivateRoute>
             <Layout>
               <Reports />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/activity"
+        element={
+          <PrivateRoute>
+            <Layout>
+              <ActivityPage />
             </Layout>
           </PrivateRoute>
         }

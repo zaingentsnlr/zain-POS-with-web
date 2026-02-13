@@ -11,6 +11,7 @@ import invoicesRoutes from './routes/invoices';
 import reportsRoutes from './routes/reports';
 import syncRoutes from './routes/sync';
 import maintenanceRoutes from './routes/maintenance';
+import activityRoutes from './routes/activity';
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use('/api/invoices', invoicesRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/activity', activityRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

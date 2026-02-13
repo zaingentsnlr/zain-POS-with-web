@@ -64,6 +64,20 @@ class CloudSyncService {
             return { success: false, error: error.message };
         }
     }
+
+    async syncAuditLogs(logs: any[]) {
+        if (!this.apiUrl) return;
+        try {
+            console.log(`Syncing ${logs.length} audit logs to cloud...`);
+            await axios.post(`${this.apiUrl}/api/sync/audit`, { logs }, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            return { success: true };
+        } catch (error: any) {
+            console.error('Audit Log sync failed:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
 }
 
 export const cloudSync = new CloudSyncService();

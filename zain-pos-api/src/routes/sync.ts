@@ -397,4 +397,49 @@ router.post('/settings', async (req, res) => {
     }
 });
 
+// Sync Audit Logs from Desktop
+router.post('/audit', async (req, res) => {
+    try {
+        const { logs } = req.body;
+        if (!Array.isArray(logs)) return res.status(400).json({ error: 'Invalid data' });
+
+        console.log(`📡 Cloud receiving ${logs.length} audit logs...`);
+
+        for (const log of logs) {
+            // Ensure User exists (if linked)
+            if (log.user) {
+                await prisma.user.upsert({
+                    where: { username: log.user.username },
+                    update: {},
+                    create: {
+                        id: log.user.id,
+                        username: log.user.username,
+                        name: log.user.name,
+                        role: log.user.role || 'CASHIER', // Fallback
+                        password: log.user.password || 'cloud_synced', // Fallback
+                        isActive: true
+                    }
+                });
+            }
+
+            await prisma.auditLog.upsert({
+                where: { id: log.id },
+                update: {},
+                create: {
+                    id: log.id,
+                    action: log.action,
+                    details: log.details,
+                    userId: log.userId,
+                    createdAt: new Date(log.createdAt)
+                }
+            });
+        }
+
+        res.json({ success: true, count: logs.length });
+    } catch (error: any) {
+        console.error('Audit Log Sync Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
