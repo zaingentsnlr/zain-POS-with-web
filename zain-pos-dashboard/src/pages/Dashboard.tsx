@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { DollarSign, ShoppingCart, TrendingUp, Users, AlertTriangle, Package } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { DollarSign, ShoppingCart, TrendingUp, AlertTriangle, Package } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../lib/api';
 import StatCard from '../components/StatCard';
 import { socket } from '../lib/socket';
@@ -154,8 +154,8 @@ export default function Dashboard() {
                         return (
                             <div key={mode} className="border rounded-xl overflow-hidden">
                                 <div className={`p-4 flex justify-between items-center ${mode === 'CASH' ? 'bg-green-50 text-green-700' :
-                                        mode === 'UPI' ? 'bg-blue-50 text-blue-700' :
-                                            'bg-purple-50 text-purple-700'
+                                    mode === 'UPI' ? 'bg-blue-50 text-blue-700' :
+                                        'bg-purple-50 text-purple-700'
                                     }`}>
                                     <span className="font-bold">{mode}</span>
                                     <span className="font-bold text-lg">₹{total.toLocaleString()}</span>

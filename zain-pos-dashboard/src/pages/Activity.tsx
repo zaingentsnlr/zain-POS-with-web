@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Search, AlertTriangle, Trash2, ShoppingCart, User } from 'lucide-react';
+import { Activity, Search, Trash2, ShoppingCart, User } from 'lucide-react';
 import api from '../lib/api';
 
 interface AuditLog {
