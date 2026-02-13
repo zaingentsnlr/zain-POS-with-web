@@ -352,7 +352,7 @@ export const POS: React.FC = () => {
                 };
 
                 if (canBackDate && billDate) {
-                    updateData.createdAt = new Date(billDate);
+                    updateData.createdAt = billDate === new Date().toISOString().split('T')[0] ? new Date() : new Date(billDate);
                 }
 
                 sale = await db.sales.update({
@@ -378,7 +378,7 @@ export const POS: React.FC = () => {
                         billNo,
                         userId: user!.id,
                         customerName: customerName || 'Walk-in Customer',
-                        createdAt: new Date(billDate),
+                        createdAt: billDate === new Date().toISOString().split('T')[0] ? new Date() : new Date(billDate),
                         subtotal,
                         discount: discount, // Global discount amount
                         discountPercent: 0,
