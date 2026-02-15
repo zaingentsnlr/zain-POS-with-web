@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Layout from './components/Layout';
+import { DashboardLayout } from './components/layout/DashboardLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Sales from './pages/Sales';
@@ -37,9 +37,9 @@ function AppRoutes() {
         path="/"
         element={
           <PrivateRoute>
-            <Layout>
+            <DashboardLayout>
               <Dashboard />
-            </Layout>
+            </DashboardLayout>
           </PrivateRoute>
         }
       />
@@ -47,9 +47,9 @@ function AppRoutes() {
         path="/sales"
         element={
           <PrivateRoute>
-            <Layout>
+            <DashboardLayout>
               <Sales />
-            </Layout>
+            </DashboardLayout>
           </PrivateRoute>
         }
       />
@@ -57,9 +57,9 @@ function AppRoutes() {
         path="/inventory"
         element={
           <PrivateRoute>
-            <Layout>
+            <DashboardLayout>
               <Inventory />
-            </Layout>
+            </DashboardLayout>
           </PrivateRoute>
         }
       />
@@ -67,9 +67,9 @@ function AppRoutes() {
         path="/invoices"
         element={
           <PrivateRoute>
-            <Layout>
+            <DashboardLayout>
               <Invoices />
-            </Layout>
+            </DashboardLayout>
           </PrivateRoute>
         }
       />
@@ -77,9 +77,9 @@ function AppRoutes() {
         path="/reports"
         element={
           <PrivateRoute>
-            <Layout>
+            <DashboardLayout>
               <Reports />
-            </Layout>
+            </DashboardLayout>
           </PrivateRoute>
         }
       />
@@ -87,9 +87,9 @@ function AppRoutes() {
         path="/activity"
         element={
           <PrivateRoute>
-            <Layout>
+            <DashboardLayout>
               <ActivityPage />
-            </Layout>
+            </DashboardLayout>
           </PrivateRoute>
         }
       />
