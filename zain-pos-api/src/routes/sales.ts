@@ -171,12 +171,19 @@ router.get('/hourly', async (req, res) => {
 // Get payment mode audit for today
 router.get('/audit-payment-modes', async (req, res) => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+
+        // If no time specified, set to start/end of day
+        if (!req.query.startDate) startDate.setHours(0, 0, 0, 0);
+        if (!req.query.endDate) endDate.setHours(23, 59, 59, 999);
 
         const sales = await prisma.sale.findMany({
             where: {
-                createdAt: { gte: today },
+                createdAt: {
+                    gte: startDate,
+                    lte: endDate
+                },
                 status: 'COMPLETED'
             },
             select: {

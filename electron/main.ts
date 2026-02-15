@@ -357,6 +357,25 @@ app.whenReady().then(async () => {
         // Initialize Sync Service with Prisma
         cloudSync.setPrismaInstance(prisma);
 
+        // ---------------------------------------------------------
+        // FIX: Load Cloud Config on Startup
+        // ---------------------------------------------------------
+        const urlSetting = await prisma.setting.findUnique({ where: { key: 'CLOUD_API_URL' } });
+        if (urlSetting && urlSetting.value) {
+            cloudSync.setApiUrl(urlSetting.value);
+            console.log('✅ Cloud API URL loaded:', urlSetting.value);
+        }
+
+        const syncConfig = await prisma.setting.findUnique({ where: { key: 'CLOUD_SYNC_CONFIG' } });
+        if (syncConfig && syncConfig.value) {
+            const config = JSON.parse(syncConfig.value);
+            if (config.intervalMinutes > 0) {
+                console.log(`Starting auto-sync every ${config.intervalMinutes} minutes`);
+                syncInterval = setInterval(runCloudSync, config.intervalMinutes * 60 * 1000);
+            }
+        }
+        // ---------------------------------------------------------
+
         // Start Background Sync Worker (runs every 30 seconds)
         // Checks for offline sales queue and pushes to cloud
         setInterval(() => {

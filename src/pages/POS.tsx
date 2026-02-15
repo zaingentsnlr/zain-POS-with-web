@@ -30,7 +30,7 @@ export const POS: React.FC = () => {
 
     // New State for Header
     const [customerName, setCustomerName] = useState('Walk-in Customer');
-    const [billDate, setBillDate] = useState(new Date().toISOString().split('T')[0]);
+    const [billDate, setBillDate] = useState(new Date().toLocaleDateString('en-CA'));
 
     const barcodeInputRef = useRef<HTMLInputElement>(null);
     const discountInputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +72,7 @@ export const POS: React.FC = () => {
             setOriginalPaidAmount(saleToEdit.paidAmount || 0);
         } else {
             await loadNextBillNo();
-            setBillDate(new Date().toISOString().split('T')[0]);
+            setBillDate(new Date().toLocaleDateString('en-CA'));
         }
 
         await loadProducts();
@@ -301,7 +301,7 @@ export const POS: React.FC = () => {
         setCurrentSaleId(null);
         setOriginalPaidAmount(0);
         setCustomerName('Walk-in Customer');
-        setBillDate(new Date().toISOString().split('T')[0]);
+        setBillDate(new Date().toLocaleDateString('en-CA'));
         loadNextBillNo();
         loadProducts(); // Refresh stock
         // Focus barcode
@@ -352,7 +352,7 @@ export const POS: React.FC = () => {
                 };
 
                 if (canBackDate && billDate) {
-                    updateData.createdAt = billDate === new Date().toISOString().split('T')[0] ? new Date() : new Date(billDate);
+                    updateData.createdAt = billDate === new Date().toLocaleDateString('en-CA') ? new Date() : new Date(billDate);
                 }
 
                 sale = await db.sales.update({
@@ -378,7 +378,7 @@ export const POS: React.FC = () => {
                         billNo,
                         userId: user!.id,
                         customerName: customerName || 'Walk-in Customer',
-                        createdAt: billDate === new Date().toISOString().split('T')[0] ? new Date() : new Date(billDate),
+                        createdAt: billDate === new Date().toLocaleDateString('en-CA') ? new Date() : new Date(billDate),
                         subtotal,
                         discount: discount, // Global discount amount
                         discountPercent: 0,
