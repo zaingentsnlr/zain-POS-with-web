@@ -353,6 +353,16 @@ function createWindow() {
 app.whenReady().then(async () => {
     try {
         await initializePrisma();
+
+        // Initialize Sync Service with Prisma
+        cloudSync.setPrismaInstance(prisma);
+
+        // Start Background Sync Worker (runs every 30 seconds)
+        // Checks for offline sales queue and pushes to cloud
+        setInterval(() => {
+            cloudSync.processQueue();
+        }, 30 * 1000);
+
         createWindow();
 
         app.on('activate', () => {
@@ -521,9 +531,9 @@ ipcMain.handle('db:query', async (_event, { model, method, args }) => {
 
         // Auto-Trigger Cloud Sync for Sales
         if (model === 'sale' && (method === 'create' || method === 'update')) {
-            console.log('Triggering real-time sync...');
-            // Don't await - run in background so UI isn't blocked
-            runCloudSync().catch(err => console.error('Cloud Sync Error:', err));
+            console.log('Queueing sale for background sync...');
+            // Queue the sale for background sync (Offline-first approach)
+            cloudSync.queueSale(result).catch(err => console.error('Queue Error:', err));
         }
 
         return { success: true, data: result };

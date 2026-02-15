@@ -185,12 +185,35 @@ router.post('/sales', async (req, res) => {
 
         // BROADCAST TO DASHBOARD
         try {
-            const { getIO } = require('../socket');
+            const { getIO } = require('../socket'); // Dynamic import to ensure init
+            const { pushService } = require('../services/push.service');
             const io = getIO();
-            io.emit('sale:created', { count: sales.length, timestamp: new Date() });
-            console.log(`📢 Emitted 'sale:created' for ${sales.length} sales.`);
+
+            // Emit batch update
+            io.to('shop_main').emit('sale:batch', { count: sales.length, sales, timestamp: new Date() });
+
+            // Send Push Notifications for RECENT sales (e.g., created in last 10 minutes)
+            // This prevents spamming notifications during historical sync
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+            for (const sale of sales) {
+                const saleDate = new Date(sale.createdAt);
+                if (saleDate > tenMinutesAgo) {
+                    // Send to 'main' shop (placeholder shopId)
+                    pushService.sendToShop('main', {
+                        title: 'New Sale Received',
+                        body: `Bill #${sale.billNo} - ₹${sale.grandTotal}`,
+                        url: '/invoices'
+                    });
+
+                    // Also emit single event for realtime UI toast
+                    io.to('shop_main').emit('new-sale', sale);
+                }
+            }
+
+            console.log(`📢 Realtime processed for ${sales.length} sales.`);
         } catch (e) {
-            console.error("Socket warning:", e);
+            console.error("Socket/Push warning:", e);
         }
 
         // Log the sync

@@ -6,23 +6,24 @@ let io: Server;
 export const initSocket = (httpServer: HttpServer) => {
     io = new Server(httpServer, {
         cors: {
-            origin: "*", // Allow all origins for now (adjust for production)
+            origin: process.env.DASHBOARD_URL || "*",
             methods: ["GET", "POST"]
         }
     });
 
     io.on('connection', (socket) => {
-        console.log('Client connected:', socket.id);
+        console.log(`Client connected: ${socket.id}`);
+
+        // Join Shop Room
+        socket.on('join-shop', (shopId) => {
+            if (shopId) {
+                socket.join(`shop_${shopId}`);
+                console.log(`Socket ${socket.id} joined shop_${shopId}`);
+            }
+        });
 
         socket.on('disconnect', () => {
             console.log('Client disconnected:', socket.id);
-        });
-
-        // Example: Listen for events from Desktop if needed
-        socket.on('desktop:sale-completed', (data) => {
-            console.log('Desktop reported sale:', data);
-            // Broadcast to dashboard immediately
-            io.emit('sale:created', data);
         });
     });
 
