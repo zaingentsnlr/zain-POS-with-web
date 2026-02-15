@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { CreditCard, Trash2, X, Plus, Minus, Scan, Save, Banknote, Smartphone, Printer } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -17,6 +17,7 @@ export const POS: React.FC = () => {
     // Component State
     const [barcode, setBarcode] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [products, setProducts] = useState<any[]>([]);
     const [billNo, setBillNo] = useState(1);
     const [paidAmount, setPaidAmount] = useState('');
@@ -58,6 +59,14 @@ export const POS: React.FC = () => {
     useEffect(() => {
         loadData();
     }, []);
+
+    // Debounce search input for better performance
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+        }, 150);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
 
     const loadData = async () => {
         // Check for sale in location state (Edit/Exchange mode)
@@ -170,6 +179,16 @@ export const POS: React.FC = () => {
         }
     };
 
+    // Create barcode lookup map for O(1) performance
+    const barcodeMap = useMemo(() => {
+        const map = new Map();
+        products.forEach(p => {
+            if (p.barcode) map.set(p.barcode, p);
+            if (p.sku) map.set(p.sku, p);
+        });
+        return map;
+    }, [products]);
+
     const handleBarcodeSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -183,7 +202,7 @@ export const POS: React.FC = () => {
 
         try {
             const trimmedBarcode = barcode.trim();
-            const variant = products.find((p) => p.barcode === trimmedBarcode || p.sku === trimmedBarcode);
+            const variant = barcodeMap.get(trimmedBarcode);
 
             if (variant) {
                 if (user?.role !== 'ADMIN' && !user?.permAddItem) {
@@ -485,19 +504,20 @@ export const POS: React.FC = () => {
         }
     };
 
-    const filteredProducts = products.filter((p) => {
-        // Search Filter
-        if (!searchQuery) return true;
-        // Normalize: remove all spaces and convert to lowercase
-        const normalize = (str: string) => (str || '').toLowerCase().replace(/\s+/g, '');
-        const query = normalize(searchQuery);
+    // Memoized filtered products for optimal performance
+    const filteredProducts = useMemo(() => {
+        if (!debouncedSearch) return products;
 
-        return (
-            normalize(p.product?.name || '').includes(query) ||
-            normalize(p.barcode || '').includes(query) ||
-            (p.sku && normalize(p.sku || '').includes(query))
-        );
-    });
+        const query = debouncedSearch.toLowerCase().replace(/\s+/g, '');
+
+        return products.filter((p) => {
+            const name = (p.product?.name || '').toLowerCase().replace(/\s+/g, '');
+            const barcode = (p.barcode || '').toLowerCase().replace(/\s+/g, '');
+            const sku = (p.sku || '').toLowerCase().replace(/\s+/g, '');
+
+            return name.includes(query) || barcode.includes(query) || sku.includes(query);
+        });
+    }, [products, debouncedSearch]);
 
     // Display helpers for Footer
     // Display helpers for Footer

@@ -3,6 +3,7 @@ export type AuditAction =
     | 'SALE_VOID'
     | 'SALE_CREATE'
     | 'SALE_UPDATE'
+    | 'PAYMENT_UPDATE'
     | 'STOCK_ADD'
     | 'STOCK_ADJUST'
     | 'PRODUCT_DELETE'

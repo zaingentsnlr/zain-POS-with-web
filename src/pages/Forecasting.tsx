@@ -153,7 +153,7 @@ export const Forecasting: React.FC = () => {
             // 6. Seasonal insights
             const currentMonth = new Date().getMonth();
             const upcomingFestivals = KERALA_FESTIVALS.filter(f => {
-                if (f.month !== null) return f.month >= currentMonth && f.month <= currentMonth + 2;
+                if (f.month !== null && f.month !== undefined) return f.month >= currentMonth && f.month <= currentMonth + 2;
                 return false;
             });
 
