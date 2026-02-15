@@ -193,6 +193,15 @@ router.post('/sales', async (req, res) => {
             console.error("Socket warning:", e);
         }
 
+        // Log the sync
+        await prisma.auditLog.create({
+            data: {
+                action: 'SYNC_SALES',
+                details: `Synced ${sales.length} sales from desktop`,
+                userId: null // System action
+            }
+        });
+
         res.json({ success: true, count: sales.length });
     } catch (error: any) {
         console.error('Sync error:', error);
@@ -227,6 +236,16 @@ router.post('/users', async (req, res) => {
             });
         }
         console.log('✅ Users synced.');
+
+        // Log the sync
+        await prisma.auditLog.create({
+            data: {
+                action: 'SYNC_USERS',
+                details: `Synced ${users.length} users from desktop`,
+                userId: null
+            }
+        });
+
         res.json({ success: true });
     } catch (error) {
         console.error('User Sync Error:', error);
@@ -328,6 +347,15 @@ router.post('/inventory', async (req, res) => {
             });
             console.log(`🧹 Archived ${result.count} stale variants.`);
         }
+
+        // Log the sync
+        await prisma.auditLog.create({
+            data: {
+                action: 'SYNC_INVENTORY',
+                details: `Synced ${products.length} products from desktop`,
+                userId: null
+            }
+        });
 
         res.json({ success: true, count: products.length });
     } catch (error: any) {

@@ -34,6 +34,15 @@ router.post('/login', async (req, res) => {
             { expiresIn: '24h' }
         );
 
+        // Create audit log
+        await prisma.auditLog.create({
+            data: {
+                action: 'USER_LOGIN',
+                details: `User ${user.username} logged in`,
+                userId: user.id
+            }
+        });
+
         res.json({
             token,
             user: {

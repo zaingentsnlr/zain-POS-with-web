@@ -121,9 +121,19 @@ export default function Layout({ children }: LayoutProps) {
                 {/* Mobile Header (Only visible on small screens) */}
                 <div className="lg:hidden bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border h-16 flex items-center justify-between px-4 sticky top-0 z-30">
                     <h1 className="text-xl font-bold gradient-primary bg-clip-text text-transparent">Zain POS</h1>
-                    <button onClick={() => setDarkMode(!darkMode)} className="p-2">
-                        {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <Link to="/activity" className="p-2 relative">
+                            <Bell size={20} className="text-gray-600 dark:text-gray-300" />
+                            {/* Simple dot for now */}
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+                        </Link>
+                        <button onClick={() => setDarkMode(!darkMode)} className="p-2">
+                            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
+                        <button onClick={handleLogout} className="p-2 text-red-500">
+                            <LogOut size={20} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Desktop Header */}
@@ -175,12 +185,9 @@ export default function Layout({ children }: LayoutProps) {
                             </Link>
                         );
                     })}
-                    <button onClick={handleLogout} className="flex flex-col items-center gap-1 px-3 py-2 text-gray-500">
-                        <LogOut size={20} />
-                        <span className="text-[10px] font-medium">Exit</span>
-                    </button>
+                    })}
                 </nav>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }
