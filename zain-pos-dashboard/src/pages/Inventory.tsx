@@ -2,9 +2,7 @@ import { Package, AlertTriangle, TrendingDown, DollarSign, Search } from 'lucide
 import { useInventoryMetrics } from '@/features/inventory/hooks/useInventoryMetrics';
 import { StockHealthBadge } from '@/features/inventory/components/StockHealthBadge';
 import { StatCard } from '@/components/shared/StatCard';
-import { cn } from '@/lib/utils';
 import { useState } from 'react';
-import { Product } from '@/features/inventory/services/inventory.service';
 
 export default function Inventory() {
     const { products, metrics, loading } = useInventoryMetrics();

@@ -1,6 +1,6 @@
 import { AlertTriangle, Info, XCircle, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Alert } from '@/hooks/useSmartAlerts';
+import { type Alert } from '@/hooks/useSmartAlerts';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 

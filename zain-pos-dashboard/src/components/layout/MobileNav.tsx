@@ -4,7 +4,6 @@ import {
     TrendingUp,
     Package,
     FileText,
-    BarChart3,
     Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

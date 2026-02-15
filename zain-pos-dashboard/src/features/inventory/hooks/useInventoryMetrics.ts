@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { inventoryService, Product } from '../services/inventory.service';
+import { inventoryService, type Product } from '../services/inventory.service';
 
 export function useInventoryMetrics() {
     const [products, setProducts] = useState<Product[]>([]);
