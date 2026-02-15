@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Printer, Search, Trash2, Filter, RefreshCcw, Calendar as CalendarIcon, ChevronDown, ChevronUp, Tag } from 'lucide-react';
+import { Printer, Search, Trash2, Filter, RefreshCcw, Calendar as CalendarIcon, ChevronDown, ChevronUp, Tag, Banknote, CreditCard, QrCode } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Input } from '../components/ui/Input';
@@ -12,6 +12,7 @@ import { formatIndianCurrency } from '../lib/format';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowLeftRight, History, Minus, Plus, Undo2 } from 'lucide-react';
 
 type TimePeriod = 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
 
@@ -38,11 +39,38 @@ export const Sales: React.FC = () => {
     const [isVoiding, setIsVoiding] = useState(false);
     const [updatingPayment, setUpdatingPayment] = useState<string | null>(null);
 
+    // New Professional Redesign State
+    const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
+    const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+    const [selectedSaleForAction, setSelectedSaleForAction] = useState<any>(null);
+    const [returnItems, setReturnItems] = useState<any[]>([]); // Items being returned
+    const [exchangeNewItems, setExchangeNewItems] = useState<any[]>([]); // New items being taken
+    const [allProducts, setAllProducts] = useState<any[]>([]);
+    const [refundReason, setRefundReason] = useState('');
+    const [diffAmount, setDiffAmount] = useState(0);
+
+    // New stats states for entire filtered range
+    const [totalMatchedRevenue, setTotalMatchedRevenue] = useState(0);
+    const [totalMatchedBills, setTotalMatchedBills] = useState(0);
+
+    // Payment Update Modal State
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [selectedSaleForPaymentUpdate, setSelectedSaleForPaymentUpdate] = useState<any>(null);
+    const [paymentEditData, setPaymentEditData] = useState({
+        method: 'CASH' as 'CASH' | 'CARD' | 'UPI' | 'SPLIT',
+        cashAmount: '',
+        upiAmount: '',
+        cardAmount: ''
+    });
+    const [isSavingPayment, setIsSavingPayment] = useState(false);
+
     useEffect(() => {
-        // Only trigger full load on filter change, not on limit change
-        loadSales(false);
-        loadShopSettings();
-    }, [timePeriod, selectedDate]);
+        const timer = setTimeout(() => {
+            loadSales(false);
+            loadShopSettings();
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [timePeriod, selectedDate, searchQuery, paymentFilter]);
 
     // Handle Load More separately
     useEffect(() => {
@@ -81,20 +109,52 @@ export const Sales: React.FC = () => {
                 where.createdAt = { gte: startOfWeek(new Date()).toISOString(), lte: endOfWeek(new Date()).toISOString() };
             } else if (timePeriod === 'month') {
                 where.createdAt = { gte: startOfMonth(new Date()).toISOString(), lte: endOfMonth(new Date()).toISOString() };
-            } else if (timePeriod === 'year') {
-                where.createdAt = { gte: startOfYear(new Date()).toISOString(), lte: endOfYear(new Date()).toISOString() };
+            } else if (timePeriod === 'custom') {
+                const start = startOfDay(new Date(selectedDate));
+                const end = endOfDay(new Date(selectedDate));
+                where.createdAt = { gte: start.toISOString(), lte: end.toISOString() };
             }
 
-            const data = await db.sales.findMany({
-                where,
-                include: {
-                    items: true,
-                    user: { select: { name: true } },
-                },
-                orderBy: { createdAt: 'desc' },
-                take: 50,
-                skip: isMore ? sales.length : 0,
-            });
+            // Add payment filter
+            if (paymentFilter !== 'all') {
+                where.paymentMethod = paymentFilter;
+            }
+
+            // Add search filter
+            if (searchQuery) {
+                where.OR = [
+                    { billNo: { contains: searchQuery } },
+                    { customerName: { contains: searchQuery } },
+                    { customerPhone: { contains: searchQuery } },
+                    { items: { some: { productName: { contains: searchQuery } } } }
+                ];
+            }
+
+            const [data, totalStats] = await Promise.all([
+                db.sales.findMany({
+                    where,
+                    include: {
+                        items: true,
+                        payments: true,
+                        user: { select: { name: true } },
+                        exchanges: { include: { items: true } },
+                        refunds: { include: { items: true } }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: 50,
+                    skip: isMore ? sales.length : 0,
+                }),
+                isMore ? Promise.resolve(null) : db.sales.aggregate({
+                    where: { ...where, status: { not: 'VOIDED' } },
+                    _sum: { grandTotal: true },
+                    _count: { id: true }
+                })
+            ]);
+
+            if (totalStats) {
+                setTotalMatchedRevenue(totalStats._sum.grandTotal || 0);
+                setTotalMatchedBills(totalStats._count.id || 0);
+            }
 
             if (isMore) {
                 setSales(prev => [...prev, ...data]);
@@ -132,27 +192,121 @@ export const Sales: React.FC = () => {
         setVoidReason('');
     };
 
-    const handleExchange = (sale: any) => {
-        // Clear current cart
-        clearCart();
+    const handleExchangeClick = async (sale: any) => {
+        setSelectedSaleForAction(sale);
+        setReturnItems(sale.items.map((it: any) => ({ ...it, returnQty: 0 })));
+        setExchangeNewItems([]);
+        setDiffAmount(0);
+        setIsExchangeModalOpen(true);
 
-        // Load items from this sale into POS cart
-        sale.items.forEach((item: any) => {
-            addItem({
-                variantId: item.variantId,
-                productName: item.productName,
-                variantInfo: item.variantInfo || '',
-                barcode: '', // Not strictly needed for cart display in edit mode
-                quantity: item.quantity,
-                mrp: item.mrp,
-                sellingPrice: item.sellingPrice,
-                discount: item.discount,
-                taxRate: item.taxRate
+        // Load products for exchange selection
+        try {
+            const variants = await db.productVariants.findMany({
+                where: { isActive: true },
+                include: { product: true }
             });
-        });
+            setAllProducts(variants);
+        } catch (e) {
+            console.error("Failed to load products for exchange", e);
+        }
+    };
 
-        // Navigate to POS with original sale ID
-        navigate('/pos', { state: { sale } });
+    const handleRefundClick = (sale: any) => {
+        setSelectedSaleForAction(sale);
+        setReturnItems(sale.items.map((it: any) => ({ ...it, refundQty: 0 })));
+        setRefundReason('');
+        setIsRefundModalOpen(true);
+    };
+
+    const submitExchange = async () => {
+        if (!selectedSaleForAction) return;
+
+        const totalReturnedValue = returnItems.reduce((sum, it) => sum + (it.sellingPrice * it.returnQty), 0);
+        const totalNewValue = exchangeNewItems.reduce((sum, it) => sum + (it.sellingPrice * it.quantity), 0);
+        const difference = totalNewValue - totalReturnedValue;
+
+        try {
+            const returns = returnItems.filter(ri => ri.returnQty > 0).map(ri => ({
+                returnedId: ri.variantId,
+                returnedQty: ri.returnQty,
+                newId: null,
+                newQty: 0,
+                priceDiff: -(ri.sellingPrice * ri.returnQty)
+            }));
+
+            const news = exchangeNewItems.map(ni => ({
+                returnedId: null,
+                returnedQty: 0,
+                newId: ni.variantId,
+                newQty: ni.quantity,
+                priceDiff: ni.sellingPrice * ni.quantity
+            }));
+
+            const exchangeData = {
+                originalInvoiceId: selectedSaleForAction.id,
+                userId: user?.id,
+                differenceAmount: difference,
+                notes: `Exchange for Bill #${selectedSaleForAction.billNo}`,
+                items: [...returns, ...news],
+                payments: [{
+                    paymentMode: 'CASH', // Default for diff
+                    amount: difference
+                }]
+            };
+
+            const result = await window.electronAPI.sales.exchange(exchangeData);
+            if (result.success) {
+                alert("Exchange Processed Successfully!");
+                setIsExchangeModalOpen(false);
+                loadSales();
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error: any) {
+            alert(`Exchange Failed: ${error.message}`);
+        }
+    };
+
+    const submitRefund = async () => {
+        if (!selectedSaleForAction || !refundReason.trim()) {
+            alert("Reason is mandatory for refunds.");
+            return;
+        }
+
+        const itemsToRefund = returnItems.filter(it => it.refundQty > 0);
+        if (itemsToRefund.length === 0) {
+            alert("Select at least one item to refund.");
+            return;
+        }
+
+        try {
+            const refundData = {
+                originalInvoiceId: selectedSaleForAction.id,
+                userId: user?.id,
+                totalAmount: itemsToRefund.reduce((sum, it) => sum + (it.sellingPrice * it.refundQty), 0),
+                reason: refundReason,
+                items: itemsToRefund.map(it => ({
+                    id: it.variantId,
+                    qty: it.refundQty,
+                    amount: it.sellingPrice * it.refundQty
+                })),
+                payments: [{
+                    paymentMode: 'CASH', // Default refund mode
+                    amount: itemsToRefund.reduce((sum, it) => sum + (it.sellingPrice * it.refundQty), 0)
+                }]
+            };
+
+            const result = await window.electronAPI.sales.refund(refundData);
+            if (result.success) {
+                alert("Refund Processed!");
+                setIsRefundModalOpen(false);
+                loadSales();
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error: any) {
+            alert(`Refund Failed: ${error.message}`);
+        }
     };
 
     const confirmVoid = async () => {
@@ -185,29 +339,81 @@ export const Sales: React.FC = () => {
     };
 
     const handleUpdatePayment = async (saleId: string, currentMethod: string) => {
-        const methods: ('CASH' | 'CARD' | 'UPI')[] = ['CASH', 'CARD', 'UPI'];
-        const nextMethod = methods[(methods.indexOf(currentMethod as any) + 1) % methods.length];
+        const sale = sales.find(s => s.id === saleId);
+        if (!sale) return;
+
+        setSelectedSaleForPaymentUpdate(sale);
+
+        // Pre-fill modal based on current state
+        if (currentMethod === 'SPLIT') {
+            const cash = sale.payments?.find((p: any) => p.paymentMode === 'CASH')?.amount || 0;
+            const upi = sale.payments?.find((p: any) => p.paymentMode === 'UPI')?.amount || 0;
+            const card = sale.payments?.find((p: any) => p.paymentMode === 'CARD')?.amount || 0;
+            setPaymentEditData({
+                method: 'SPLIT',
+                cashAmount: cash > 0 ? cash.toString() : '',
+                upiAmount: upi > 0 ? upi.toString() : '',
+                cardAmount: card > 0 ? card.toString() : ''
+            });
+        } else {
+            setPaymentEditData({
+                method: currentMethod as any,
+                cashAmount: '',
+                upiAmount: '',
+                cardAmount: ''
+            });
+        }
+
+        setIsPaymentModalOpen(true);
+    };
+
+    const submitPaymentUpdate = async () => {
+        if (!selectedSaleForPaymentUpdate) return;
+
+        const { method, cashAmount, upiAmount, cardAmount } = paymentEditData;
+        const totalAmount = selectedSaleForPaymentUpdate.grandTotal;
+
+        let finalPayments = [];
+        if (method === 'SPLIT') {
+            const sum = (parseFloat(cashAmount) || 0) + (parseFloat(upiAmount) || 0) + (parseFloat(cardAmount) || 0);
+            if (Math.abs(sum - totalAmount) > 0.01) {
+                alert(`Total must equal ${formatIndianCurrency(totalAmount)}. Current sum: ${formatIndianCurrency(sum)}`);
+                return;
+            }
+            if (parseFloat(cashAmount) > 0) finalPayments.push({ paymentMode: 'CASH', amount: parseFloat(cashAmount) });
+            if (parseFloat(upiAmount) > 0) finalPayments.push({ paymentMode: 'UPI', amount: parseFloat(upiAmount) });
+            if (parseFloat(cardAmount) > 0) finalPayments.push({ paymentMode: 'CARD', amount: parseFloat(cardAmount) });
+        } else {
+            finalPayments = [{ paymentMode: method, amount: totalAmount }];
+        }
 
         try {
-            setUpdatingPayment(saleId);
-            await db.sales.update({
-                where: { id: saleId },
-                data: { paymentMethod: nextMethod }
+            setIsSavingPayment(true);
+            const result = await window.electronAPI.sales.updatePayment({
+                saleId: selectedSaleForPaymentUpdate.id,
+                userId: user?.id,
+                paymentData: {
+                    paymentMethod: method,
+                    paidAmount: selectedSaleForPaymentUpdate.paidAmount,
+                    changeAmount: selectedSaleForPaymentUpdate.changeAmount,
+                    payments: finalPayments
+                }
             });
 
+            if (!result.success) throw new Error(result.error);
+
             await auditService.log(
-                'SALE_UPDATE',
-                `Changed payment method to ${nextMethod} for Sale ID: ${saleId}`,
+                'PAYMENT_UPDATE',
+                `Updated payment for Bill #${selectedSaleForPaymentUpdate.billNo} to ${method}.`,
                 user?.id
             );
 
-            // Update local state without full reload for better UX
-            setSales(prev => prev.map(s => s.id === saleId ? { ...s, paymentMethod: nextMethod } : s));
+            setSales(prev => prev.map(s => s.id === selectedSaleForPaymentUpdate.id ? { ...s, paymentMethod: method, payments: result.data.payments } : s));
+            setIsPaymentModalOpen(false);
         } catch (error: any) {
-            console.error('Failed to update payment method:', error);
-            alert('Failed to update payment method');
+            alert(`Failed: ${error.message}`);
         } finally {
-            setUpdatingPayment(null);
+            setIsSavingPayment(false);
         }
     };
 
@@ -271,33 +477,12 @@ export const Sales: React.FC = () => {
         }
     };
 
-    const filteredSales = sales.filter((s) => {
-        // 1. Search filter logic (AND search for comma-separated terms)
-        const searchTerms = searchQuery.toLowerCase().split(',').map(term => term.trim()).filter(Boolean);
-        const matchesSearch = searchTerms.length === 0 || searchTerms.every(term => {
-            const matchesBillNo = s.billNo.toString().includes(term);
-            const matchesCustomer = s.customerName?.toLowerCase().includes(term) || s.customerPhone?.includes(term);
-            const matchesItems = s.items.some((i: any) => i.productName.toLowerCase().includes(term));
-            return matchesBillNo || matchesCustomer || matchesItems;
-        });
+    const filteredSales = sales;
 
-        // 2. Time period filter
-        const dateRange = getDateRange();
-        const matchesTimePeriod = !dateRange || (
-            new Date(s.createdAt) >= dateRange.start &&
-            new Date(s.createdAt) <= dateRange.end
-        );
-
-        // 3. Payment method filter
-        const matchesPayment = paymentFilter === 'all' || s.paymentMethod === paymentFilter;
-
-        return matchesSearch && matchesTimePeriod && matchesPayment;
-    });
-
-    // Calculate summary stats for filtered sales (excluding VOIDED)
-    const activeSales = filteredSales.filter(s => s.status !== 'VOIDED');
-    const totalRevenue = activeSales.reduce((sum, s) => sum + s.grandTotal, 0);
-    const totalBills = activeSales.length;
+    // Summary display logic
+    const totalRevenue = totalMatchedRevenue;
+    const totalBillsCountSnapshot = totalMatchedBills;
+    const averageBill = totalBillsCountSnapshot > 0 ? totalRevenue / totalBillsCountSnapshot : 0;
 
     return (
         <div className="space-y-6">
@@ -362,25 +547,37 @@ export const Sales: React.FC = () => {
             {/* Time Period Tabs */}
             <div className="flex gap-2">
                 <button
-                    onClick={() => setTimePeriod('today')}
+                    onClick={() => {
+                        setTimePeriod('today');
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'today' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
                     Today
                 </button>
                 <button
-                    onClick={() => setTimePeriod('week')}
+                    onClick={() => {
+                        setTimePeriod('week');
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'week' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
                     This Week
                 </button>
                 <button
-                    onClick={() => setTimePeriod('month')}
+                    onClick={() => {
+                        setTimePeriod('month');
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'month' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
                     This Month
                 </button>
                 <button
-                    onClick={() => setTimePeriod('year')}
+                    onClick={() => {
+                        setTimePeriod('year');
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'year' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
                     This Year
@@ -392,7 +589,10 @@ export const Sales: React.FC = () => {
                     Selected Date
                 </button>
                 <button
-                    onClick={() => setTimePeriod('all')}
+                    onClick={() => {
+                        setTimePeriod('all');
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'all' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
                     All Time
@@ -400,10 +600,10 @@ export const Sales: React.FC = () => {
             </div>
 
             {/* Summary Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="card">
                     <p className="text-sm text-gray-600 dark:text-gray-400">Total Bills</p>
-                    <p className="text-2xl font-bold mt-1">{totalBills}</p>
+                    <p className="text-2xl font-bold mt-1">{totalBillsCountSnapshot}</p>
                 </div>
                 <div className="card">
                     <p className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</p>
@@ -414,7 +614,7 @@ export const Sales: React.FC = () => {
                 <div className="card">
                     <p className="text-sm text-gray-600 dark:text-gray-400">Average Bill</p>
                     <p className="text-2xl font-bold mt-1">
-                        {formatIndianCurrency(totalBills > 0 ? totalRevenue / totalBills : 0)}
+                        {formatIndianCurrency(averageBill)}
                     </p>
                 </div>
             </div>
@@ -518,6 +718,16 @@ export const Sales: React.FC = () => {
                                                             VOID
                                                         </span>
                                                     )}
+                                                    {sale.exchanges?.length > 0 && (
+                                                        <span className="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded border border-orange-200 font-black uppercase">
+                                                            Exchanged
+                                                        </span>
+                                                    )}
+                                                    {sale.refunds?.length > 0 && (
+                                                        <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-black uppercase">
+                                                            Refunded
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className={`whitespace-nowrap text-xs ${sale.status === 'VOIDED' ? 'line-through text-gray-400' : 'text-gray-600'}`}>
@@ -552,31 +762,38 @@ export const Sales: React.FC = () => {
                                                         <Printer className="w-4 h-4" />
                                                     </Button>
 
-                                                    {(user?.role === 'ADMIN' || user?.permVoidSale || user?.permEditSales) && sale.status !== 'VOIDED' && (
-                                                        <>
-                                                            {(user?.role === 'ADMIN' || user?.permEditSales) && (
-                                                                <Button
-                                                                    variant="secondary"
-                                                                    size="sm"
-                                                                    title="Exchange / Edit"
-                                                                    onClick={() => handleExchange(sale)}
-                                                                    className="shadow-sm"
-                                                                >
-                                                                    <RefreshCcw className="w-4 h-4" />
-                                                                </Button>
-                                                            )}
-                                                            {(user?.role === 'ADMIN' || user?.permVoidSale) && (
-                                                                <Button
-                                                                    variant="danger"
-                                                                    size="sm"
-                                                                    title="Void Bill"
-                                                                    onClick={() => handleVoidClick(sale.id)}
-                                                                    className="shadow-sm"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </Button>
-                                                            )}
-                                                        </>
+                                                    {(user?.role === 'ADMIN' || user?.permEditSales) && sale.status !== 'VOIDED' && (
+                                                        <div className="flex gap-1">
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                title="Process Exchange"
+                                                                onClick={() => handleExchangeClick(sale)}
+                                                                className="shadow-sm bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100"
+                                                            >
+                                                                <ArrowLeftRight className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                title="Process Refund"
+                                                                onClick={() => handleRefundClick(sale)}
+                                                                className="shadow-sm bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                                                            >
+                                                                <Undo2 className="w-4 h-4" />
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                    {(user?.role === 'ADMIN' || user?.permVoidSale) && sale.status !== 'VOIDED' && (
+                                                        <Button
+                                                            variant="danger"
+                                                            size="sm"
+                                                            title="Void Bill (Legacy)"
+                                                            onClick={() => handleVoidClick(sale.id)}
+                                                            className="shadow-sm"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
                                                     )}
                                                 </div>
                                             </td>
@@ -592,29 +809,121 @@ export const Sales: React.FC = () => {
                                                             Items Purchased
                                                         </h4>
                                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                            {sale.items.map((item: any, idx: number) => (
-                                                                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
-                                                                    <div className="min-w-0">
-                                                                        <div className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
-                                                                            {item.productName}
+                                                            {sale.items.map((item: any, idx: number) => {
+                                                                const returnedQty = (sale.exchanges || []).reduce((sum: number, ex: any) =>
+                                                                    sum + (ex.items || []).filter((ei: any) => ei.returnedItemId === item.variantId).reduce((s: number, ei: any) => s + ei.returnedQty, 0), 0);
+                                                                const refundedQty = (sale.refunds || []).reduce((sum: number, ref: any) =>
+                                                                    sum + (ref.items || []).filter((ri: any) => ri.variantId === item.variantId).reduce((s: number, ri: any) => s + ri.quantity, 0), 0);
+                                                                const activeQty = item.quantity - returnedQty - refundedQty;
+
+                                                                return (
+                                                                    <div key={idx} className={`flex justify-between items-center p-3 rounded-lg border ${activeQty <= 0 ? 'bg-gray-100 dark:bg-gray-800 opacity-50 border-dashed' : 'bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700'}`}>
+                                                                        <div className="min-w-0">
+                                                                            <div className="font-bold text-sm text-gray-900 dark:text-gray-100 truncate flex items-center gap-2">
+                                                                                {item.productName}
+                                                                                {activeQty <= 0 && <span className="text-[8px] bg-gray-200 text-gray-600 px-1 rounded">REMOVED</span>}
+                                                                            </div>
+                                                                            <div className="text-[10px] text-gray-500 font-medium">
+                                                                                {item.variantInfo}
+                                                                            </div>
                                                                         </div>
-                                                                        <div className="text-[10px] text-gray-500 font-medium">
-                                                                            {item.variantInfo}
+                                                                        <div className="text-right flex-shrink-0 ml-4">
+                                                                            <div className={`text-xs font-black ${activeQty <= 0 ? 'text-gray-400' : 'text-primary-600'}`}>
+                                                                                {activeQty} / {item.quantity} × {formatIndianCurrency(item.sellingPrice)}
+                                                                            </div>
+                                                                            {(returnedQty > 0 || refundedQty > 0) && (
+                                                                                <div className="text-[9px] text-red-500 font-bold uppercase">
+                                                                                    {returnedQty > 0 ? `${returnedQty} Returned ` : ''}
+                                                                                    {refundedQty > 0 ? `${refundedQty} Refunded` : ''}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+
+                                                            {/* Show items added via exchange */}
+                                                            {(sale.exchanges || []).flatMap((ex: any) => ex.items || []).filter((ei: any) => ei.newItemId).map((newItem: any, idx: number) => (
+                                                                <div key={`new-${idx}`} className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-100 dark:border-green-900/30">
+                                                                    <div className="min-w-0">
+                                                                        <div className="font-bold text-sm text-green-800 dark:text-green-400 truncate flex items-center gap-2">
+                                                                            Added Item
+                                                                            <span className="text-[8px] bg-green-200 text-green-700 px-1 rounded">EXCHANGE</span>
+                                                                        </div>
+                                                                        <div className="text-[10px] text-green-600/70 font-medium">
+                                                                            Qty: {newItem.newQty} | Price: {formatIndianCurrency(newItem.priceDiff / newItem.newQty)}
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right flex-shrink-0 ml-4">
-                                                                        <div className="text-xs font-black text-primary-600">
-                                                                            {item.quantity} × {formatIndianCurrency(item.sellingPrice)}
+                                                                        <div className="text-xs font-black text-green-600">
+                                                                            + {formatIndianCurrency(newItem.priceDiff)}
                                                                         </div>
-                                                                        {item.discount > 0 && (
-                                                                            <div className="text-[10px] text-orange-500 font-bold">
-                                                                                - {formatIndianCurrency(item.discount)} off
-                                                                            </div>
-                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             ))}
                                                         </div>
+
+                                                        {/* Payment Breakdown (Especially for SPLIT) */}
+                                                        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                                            <h5 className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest flex items-center gap-2">
+                                                                <CreditCard className="w-3 h-3" />
+                                                                Payment Breakdown
+                                                            </h5>
+                                                            <div className="flex flex-wrap gap-3">
+                                                                {(sale.payments && sale.payments.length > 0 ? sale.payments : [
+                                                                    { paymentMode: sale.paymentMethod, amount: sale.grandTotal }
+                                                                ]).map((p: any, i: number) => {
+                                                                    let Icon = Banknote;
+                                                                    let colorClass = "bg-green-50 text-green-700 border-green-200";
+
+                                                                    if (p.paymentMode === 'CARD') {
+                                                                        Icon = CreditCard;
+                                                                        colorClass = "bg-blue-50 text-blue-700 border-blue-200";
+                                                                    } else if (p.paymentMode === 'UPI') {
+                                                                        Icon = QrCode;
+                                                                        colorClass = "bg-purple-50 text-purple-700 border-purple-200";
+                                                                    }
+
+                                                                    return (
+                                                                        <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-sm ${colorClass}`}>
+                                                                            <Icon className="w-3.5 h-3.5" />
+                                                                            <span className="text-xs font-black uppercase tracking-wider">{p.paymentMode}</span>
+                                                                            <span className="text-sm font-black text-gray-900 dark:text-gray-100">{formatIndianCurrency(p.amount)}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Transaction History Timeline */}
+                                                        {((sale.exchanges || []).length > 0 || (sale.refunds || []).length > 0) && (
+                                                            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                                                <h5 className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest flex items-center gap-2">
+                                                                    <History className="w-3 h-3" />
+                                                                    Adjustment History
+                                                                </h5>
+                                                                <div className="space-y-2">
+                                                                    {(sale.exchanges || []).map((ex: any, i: number) => (
+                                                                        <div key={i} className="flex items-center gap-3 text-xs">
+                                                                            <div className="w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.5)]"></div>
+                                                                            <span className="text-gray-500 font-medium">{format(new Date(ex.exchangeDate), 'dd MMM, HH:mm')}:</span>
+                                                                            <span className="font-bold text-orange-600">Exchange Processed</span>
+                                                                            <span className="text-gray-400">({ex.notes})</span>
+                                                                            <span className="ml-auto font-black">{ex.differenceAmount > 0 ? '+' : ''}{formatIndianCurrency(ex.differenceAmount)}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                    {(sale.refunds || []).map((ref: any, i: number) => (
+                                                                        <div key={i} className="flex items-center gap-3 text-xs">
+                                                                            <div className="w-2 h-2 rounded-full bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.5)]"></div>
+                                                                            <span className="text-gray-500 font-medium">{format(new Date(ref.refundDate), 'dd MMM, HH:mm')}:</span>
+                                                                            <span className="font-bold text-red-600">Refunded</span>
+                                                                            <span className="text-gray-400">({ref.reason})</span>
+                                                                            <span className="ml-auto font-black">-{formatIndianCurrency(ref.totalRefundAmount)}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                         <div className="mt-4 pt-3 border-t border-dashed border-gray-200 dark:border-gray-700 flex justify-end items-center gap-8">
                                                             <div className="text-right">
                                                                 <div className="text-[10px] font-bold text-gray-400 uppercase">Subtotal</div>
@@ -697,6 +1006,303 @@ export const Sales: React.FC = () => {
                             disabled={isVoiding || !voidReason.trim()}
                         >
                             {isVoiding ? 'Voiding...' : 'Confirm Void'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Professional Refund Modal */}
+            <Modal
+                isOpen={isRefundModalOpen}
+                onClose={() => setIsRefundModalOpen(false)}
+                title={`Process Refund - Bill #${selectedSaleForAction?.billNo}`}
+                size="lg"
+            >
+                <div className="space-y-6">
+                    <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-lg flex gap-3 items-start border border-red-100 dark:border-red-900/30">
+                        <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-bold text-red-800 dark:text-red-400 uppercase">Refund Protocol</p>
+                            <p className="text-xs text-red-700 dark:text-red-500">
+                                Select items and quantities for return. Stock will be automatically adjusted. Refund reason is mandatory for accounting logs.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                        {returnItems.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl hover:border-red-200 transition-colors">
+                                <div className="flex-1">
+                                    <div className="font-bold text-sm">{item.productName}</div>
+                                    <div className="text-[10px] text-gray-400 uppercase font-black">{item.variantInfo}</div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="text-right">
+                                        <div className="text-xs font-bold text-gray-400">Price: {formatIndianCurrency(item.sellingPrice)}</div>
+                                        <div className="text-[10px] text-gray-500">Max Qty: {item.quantity}</div>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <button
+                                            onClick={() => setReturnItems(prev => prev.map((it, i) => i === idx ? { ...it, refundQty: Math.max(0, it.refundQty - 1) } : it))}
+                                            className="p-1 hover:bg-white rounded transition-colors"
+                                        >
+                                            <Minus className="w-3 h-3" />
+                                        </button>
+                                        <span className="w-6 text-center font-black text-sm">{item.refundQty}</span>
+                                        <button
+                                            onClick={() => setReturnItems(prev => prev.map((it, i) => i === idx ? { ...it, refundQty: Math.min(it.quantity, it.refundQty + 1) } : it))}
+                                            className="p-1 hover:bg-white rounded transition-colors"
+                                        >
+                                            <Plus className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="space-y-4 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700">
+                        <Input
+                            label="Reason for Refund"
+                            placeholder="e.g. Size mismatch, defective product..."
+                            value={refundReason}
+                            onChange={(e) => setRefundReason(e.target.value)}
+                            required
+                        />
+                        <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border-2 border-gray-100 dark:border-gray-700 shadow-inner">
+                            <div className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Total Refund Amount</div>
+                            <div className="text-2xl font-black text-red-600">
+                                {formatIndianCurrency(returnItems.reduce((sum, it) => sum + (it.sellingPrice * it.refundQty), 0))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="secondary" onClick={() => setIsRefundModalOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="danger"
+                            className="px-8 font-black uppercase tracking-widest text-xs"
+                            disabled={!refundReason.trim() || returnItems.every(it => it.refundQty === 0)}
+                            onClick={submitRefund}
+                        >
+                            Confirm Refund & Restock
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Professional Exchange Modal */}
+            <Modal
+                isOpen={isExchangeModalOpen}
+                onClose={() => setIsExchangeModalOpen(false)}
+                title={`Professional Exchange - Bill #${selectedSaleForAction?.billNo}`}
+                size="lg"
+            >
+                <div className="space-y-6">
+                    <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-lg flex gap-3 items-start border border-orange-100 dark:border-orange-900/30">
+                        <ArrowLeftRight className="w-5 h-5 text-orange-600 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-bold text-orange-800 dark:text-orange-400 uppercase">Exchange Workflow</p>
+                            <p className="text-xs text-orange-700 dark:text-orange-500">
+                                1. Select items being returned. 2. Select replacement items. 3. System calculates price difference.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Section A: Returns */}
+                        <div className="space-y-3">
+                            <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
+                                <Undo2 className="w-3 h-3" /> Step 1: Returned Items
+                            </h4>
+                            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                {returnItems.map((item, idx) => (
+                                    <div key={idx} className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-orange-300">
+                                        <div className="font-bold text-sm truncate">{item.productName}</div>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tight">{item.variantInfo}</span>
+                                            <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-md border border-gray-100">
+                                                <button onClick={() => setReturnItems(prev => prev.map((it, i) => i === idx ? { ...it, returnQty: Math.max(0, it.returnQty - 1) } : it))} className="p-0.5 hover:bg-white rounded"><Minus className="w-3 h-3" /></button>
+                                                <span className="w-4 text-center text-xs font-bold">{item.returnQty}</span>
+                                                <button onClick={() => setReturnItems(prev => prev.map((it, i) => i === idx ? { ...it, returnQty: Math.min(it.quantity, it.returnQty + 1) } : it))} className="p-0.5 hover:bg-white rounded"><Plus className="w-3 h-3" /></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Section B: New Items Selector */}
+                        <div className="space-y-3">
+                            <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
+                                <Plus className="w-3 h-3" /> Step 2: Replacement Items
+                            </h4>
+                            <div className="space-y-2">
+                                <select
+                                    className="w-full p-2 text-sm border-2 border-gray-100 rounded-lg outline-none focus:border-orange-400 h-10"
+                                    onChange={(e) => {
+                                        const variant = allProducts.find(p => p.id === e.target.value);
+                                        if (variant && !exchangeNewItems.find(ni => ni.variantId === variant.id)) {
+                                            setExchangeNewItems(prev => [...prev, {
+                                                variantId: variant.id,
+                                                productName: variant.product.name,
+                                                variantInfo: `${variant.size || ''} ${variant.color || ''}`.trim(),
+                                                sellingPrice: variant.sellingPrice,
+                                                quantity: 1
+                                            }]);
+                                        }
+                                    }}
+                                >
+                                    <option value="">Search & Select Product...</option>
+                                    {allProducts.filter(p => p.stock > 0).map(p => (
+                                        <option key={p.id} value={p.id}>{p.product.name} ({p.size} {p.color}) - ₹{p.sellingPrice}</option>
+                                    ))}
+                                </select>
+                                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                    {exchangeNewItems.map((item, idx) => (
+                                        <div key={idx} className="p-2 bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30 rounded-lg flex justify-between items-center group">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-xs font-bold truncate">{item.productName}</div>
+                                                <div className="text-[9px] text-gray-500 uppercase">{item.variantInfo}</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-1 bg-white p-1 rounded-md border border-orange-200">
+                                                    <button onClick={() => setExchangeNewItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, it.quantity - 1) } : it))} className="p-0.5 hover:bg-gray-100 rounded"><Minus className="w-2.5 h-2.5" /></button>
+                                                    <span className="w-4 text-center text-xs font-bold">{item.quantity}</span>
+                                                    <button onClick={() => setExchangeNewItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: it.quantity + 1 } : it))} className="p-0.5 hover:bg-gray-100 rounded"><Plus className="w-2.5 h-2.5" /></button>
+                                                </div>
+                                                <button onClick={() => setExchangeNewItems(prev => prev.filter((_, i) => i !== idx))} className="p-1 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Summary Footer */}
+                    <div className="pt-4 border-t border-dashed border-gray-200 dark:border-gray-700">
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="text-center p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                <div className="text-[10px] font-bold text-gray-400 uppercase">Returned Value</div>
+                                <div className="text-sm font-black text-gray-700">
+                                    {formatIndianCurrency(returnItems.reduce((sum, it) => sum + (it.sellingPrice * it.returnQty), 0))}
+                                </div>
+                            </div>
+                            <div className="text-center p-3 rounded-xl bg-gray-50 border border-gray-100">
+                                <div className="text-[10px] font-bold text-gray-400 uppercase">New Item Total</div>
+                                <div className="text-sm font-black text-gray-700">
+                                    {formatIndianCurrency(exchangeNewItems.reduce((sum, it) => sum + (it.sellingPrice * it.quantity), 0))}
+                                </div>
+                            </div>
+                            <div className="text-center p-3 rounded-xl bg-blue-50 border border-blue-100">
+                                <div className="text-[10px] font-bold text-blue-400 uppercase">Final Difference</div>
+                                <div className={`text-lg font-black ${exchangeNewItems.reduce((sum, it) => sum + (it.sellingPrice * it.quantity), 0) - returnItems.reduce((sum, it) => sum + (it.sellingPrice * it.returnQty), 0) > 0 ? 'text-blue-700' : 'text-green-700'}`}>
+                                    {formatIndianCurrency(exchangeNewItems.reduce((sum, it) => sum + (it.sellingPrice * it.quantity), 0) - returnItems.reduce((sum, it) => sum + (it.sellingPrice * it.returnQty), 0))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="secondary" onClick={() => setIsExchangeModalOpen(false)}>Cancel Workflow</Button>
+                        <Button
+                            variant="primary"
+                            className="px-10 font-bold bg-orange-600 hover:bg-orange-700 shadow-lg shadow-orange-100"
+                            disabled={exchangeNewItems.length === 0 && returnItems.every(it => it.returnQty === 0)}
+                            onClick={submitExchange}
+                        >
+                            Finalize Exchange
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+            {/* Payment Mode Update Modal */}
+            <Modal
+                isOpen={isPaymentModalOpen}
+                onClose={() => setIsPaymentModalOpen(false)}
+                title={`Update Payment Mode - Bill #${selectedSaleForPaymentUpdate?.billNo}`}
+                size="sm"
+            >
+                <div className="space-y-6">
+                    <div className="bg-primary-50 dark:bg-primary-900/10 p-4 rounded-lg flex gap-3 items-start border border-primary-100 dark:border-primary-900/30">
+                        <CreditCard className="w-5 h-5 text-primary-600 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-bold text-primary-800 dark:text-primary-400 uppercase">Change Payment Method</p>
+                            <p className="text-xs text-primary-700 dark:text-primary-500">
+                                Total Bill Amount: <span className="font-bold">{formatIndianCurrency(selectedSaleForPaymentUpdate?.grandTotal || 0)}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        {['CASH', 'UPI', 'CARD', 'SPLIT'].map((m) => (
+                            <button
+                                key={m}
+                                onClick={() => setPaymentEditData({ ...paymentEditData, method: m as any })}
+                                className={`py-3 px-4 rounded-xl border-2 font-black transition-all ${paymentEditData.method === m
+                                    ? 'border-primary-600 bg-primary-600 text-white shadow-lg shadow-primary-200'
+                                    : 'border-gray-100 bg-white text-gray-400 hover:border-gray-300'}`}
+                            >
+                                {m}
+                            </button>
+                        ))}
+                    </div>
+
+                    {paymentEditData.method === 'SPLIT' && (
+                        <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-inner">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Cash Amount</label>
+                                    <Input
+                                        type="number"
+                                        value={paymentEditData.cashAmount}
+                                        onChange={(e) => setPaymentEditData({ ...paymentEditData, cashAmount: e.target.value })}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">UPI Amount</label>
+                                    <Input
+                                        type="number"
+                                        value={paymentEditData.upiAmount}
+                                        onChange={(e) => setPaymentEditData({ ...paymentEditData, upiAmount: e.target.value })}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Card Amount</label>
+                                    <Input
+                                        type="number"
+                                        value={paymentEditData.cardAmount}
+                                        onChange={(e) => setPaymentEditData({ ...paymentEditData, cardAmount: e.target.value })}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className={`mt-4 pt-3 border-t border-dashed flex justify-between items-center ${Math.abs(((parseFloat(paymentEditData.cashAmount) || 0) + (parseFloat(paymentEditData.upiAmount) || 0) + (parseFloat(paymentEditData.cardAmount) || 0)) - (selectedSaleForPaymentUpdate?.grandTotal || 0)) < 0.01
+                                ? 'border-green-200 text-green-600' : 'border-red-200 text-red-600'
+                                }`}>
+                                <span className="text-xs font-bold uppercase">Current Sum:</span>
+                                <span className="text-lg font-black">
+                                    {formatIndianCurrency((parseFloat(paymentEditData.cashAmount) || 0) + (parseFloat(paymentEditData.upiAmount) || 0) + (parseFloat(paymentEditData.cardAmount) || 0))}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setIsPaymentModalOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="primary"
+                            className="px-8 font-black uppercase"
+                            disabled={isSavingPayment || (paymentEditData.method === 'SPLIT' && Math.abs(((parseFloat(paymentEditData.cashAmount) || 0) + (parseFloat(paymentEditData.upiAmount) || 0) + (parseFloat(paymentEditData.cardAmount) || 0)) - (selectedSaleForPaymentUpdate?.grandTotal || 0)) > 0.01)}
+                            onClick={submitPaymentUpdate}
+                        >
+                            {isSavingPayment ? 'Updating...' : 'Confirm Update'}
                         </Button>
                     </div>
                 </div>

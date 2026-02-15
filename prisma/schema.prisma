@@ -127,19 +127,97 @@ model Sale {
   grandTotal      Float
 
   // Payment
-  paymentMethod String @default("CASH") // CASH, CARD, UPI
+  paymentMethod String @default("CASH") // Legacy field, keep for compatibility
   paidAmount    Float
   changeAmount  Float
+  payments      InvoicePayment[]
 
   status  String  @default("COMPLETED") // COMPLETED, VOIDED
   remarks String?
-
+  
   // Historical data tracking
-  isHistorical Boolean @default(false) // True for imported old data
-  importedFrom String? // Source system (e.g., "MaxSell")
+  isHistorical Boolean @default(false)
+  importedFrom String?
+
+  // Relations for Immutable History
+  exchanges Exchange[]
+  refunds   Refund[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model InvoicePayment {
+  id          String @id @default(uuid())
+  saleId      String
+  sale        Sale   @relation(fields: [saleId], references: [id])
+  paymentMode String // CASH, CARD, UPI
+  amount      Float
+  createdAt   DateTime @default(now())
+}
+
+model Exchange {
+  id                String   @id @default(uuid())
+  originalInvoiceId String
+  invoice           Sale     @relation(fields: [originalInvoiceId], references: [id])
+  exchangeDate      DateTime @default(now())
+  differenceAmount  Float    // Total to collect or refund
+  notes             String?
+  createdBy         String
+  
+  items             ExchangeItem[]
+  payments          ExchangePayment[]
+}
+
+model ExchangeItem {
+  id             String @id @default(uuid())
+  exchangeId     String
+  exchange       Exchange @relation(fields: [exchangeId], references: [id])
+  returnedItemId String? // Variant ID
+  returnedQty    Int     @default(0)
+  newItemId      String? // Variant ID
+  newQty         Int     @default(0)
+  priceDiff      Float
+}
+
+model ExchangePayment {
+  id          String   @id @default(uuid())
+  exchangeId  String
+  exchange    Exchange @relation(fields: [exchangeId], references: [id])
+  paymentMode String
+  amount      Float
+  createdAt   DateTime @default(now())
+}
+
+model Refund {
+  id                String   @id @default(uuid())
+  originalInvoiceId String
+  invoice           Sale     @relation(fields: [originalInvoiceId], references: [id])
+  refundDate        DateTime @default(now())
+  totalRefundAmount Float
+  reason            String
+  createdBy         String
+  
+  items             RefundItem[]
+  payments          RefundPayment[]
+}
+
+model RefundItem {
+  id        String @id @default(uuid())
+  refundId  String
+  refund    Refund @relation(fields: [refundId], references: [id])
+  variantId String // Item ID
+  quantity  Int
+  amount    Float
+}
+
+model RefundPayment {
+  id          String   @id @default(uuid())
+  refundId    String
+  refund      Refund   @relation(fields: [refundId], references: [id])
+  paymentMode String
+  amount      Float
+  createdAt   DateTime @default(now())
 }
 
 model SaleItem {
@@ -165,8 +243,8 @@ model SaleItem {
 
 model AuditLog {
   id        String   @id @default(uuid())
-  action    String // SALE_VOID, STOCK_ADD, etc.
-  details   String // Description of action
+  action    String // SALE_CREATE, EXCHANGE, REFUND, etc.
+  details   String // Description
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
@@ -175,10 +253,10 @@ model AuditLog {
 model InventoryMovement {
   id        String   @id @default(uuid())
   variantId String
-  type      String // 'IN', 'OUT', 'ADJUSTMENT'
+  type      String // 'IN', 'OUT', 'ADJUSTMENT', 'EXCHANGE_RETURN', 'EXCHANGE_OUT', 'REFUND'
   quantity  Int
   reason    String?
-  reference String? // Sale ID or other reference
+  reference String? // Sale ID, Exchange ID, or Refund ID
   createdBy String
   createdAt DateTime @default(now())
 

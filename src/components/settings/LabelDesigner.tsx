@@ -85,10 +85,10 @@ export const LabelDesigner: React.FC = () => {
         width: 32,
         height: 18,
         perRow: 2,
-        gapX: 2,
-        gapY: 1,
-        marginLeft: 2,
-        marginTop: 0,
+        gapX: 8,
+        gapY: 9,
+        marginLeft: 15,
+        marginTop: 20,
         contentScale: 75
     });
 

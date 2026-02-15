@@ -18,7 +18,7 @@ interface CartState {
     customerName: string | null;
     discount: number;
     discountPercent: number;
-    paymentMethod: 'CASH' | 'CARD' | 'UPI';
+    paymentMethod: 'CASH' | 'CARD' | 'UPI' | 'SPLIT';
 
     addItem: (item: CartItem) => void;
     removeItem: (variantId: string) => void;
@@ -26,7 +26,7 @@ interface CartState {
     updateDiscount: (variantId: string, discount: number) => void;
     setCustomer: (customerId: string | null, customerName: string | null) => void;
     setGlobalDiscount: (discount: number, isPercent: boolean) => void;
-    setPaymentMethod: (method: 'CASH' | 'CARD' | 'UPI') => void;
+    setPaymentMethod: (method: 'CASH' | 'CARD' | 'UPI' | 'SPLIT') => void;
     clearCart: () => void;
 
     getSubtotal: () => number;

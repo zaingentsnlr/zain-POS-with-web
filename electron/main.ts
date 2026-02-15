@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
-import path from 'path';
-import fs from 'fs';
+import { app, BrowserWindow, ipcMain, dialog, screen } from 'electron';
+import * as path from 'path';
+import * as fs from 'fs';
 import * as XLSX from 'xlsx';
 import { cloudSync } from './sync.service';
 
@@ -28,7 +28,7 @@ try {
 
         } catch (requireErr: any) {
             console.error('Require failed:', requireErr);
-            dialog.showErrorBox('Prisma Missing', `Could not load Prisma Client from:\n${clientPath}\n\nError: ${requireErr.message}`);
+            dialog.showErrorBox('Prisma Missing', `Could not load Prisma Client from: \n${clientPath} \n\nError: ${requireErr.message} `);
             throw requireErr;
         }
 
@@ -38,7 +38,7 @@ try {
 
         if (!isFunc) {
             console.error('PrismaClient is not a function!', PrismaClient);
-            dialog.showErrorBox('Prisma Type Error', `Loaded PrismaClient is ${typeStr}, expected function.\nPath: ${clientPath}`);
+            dialog.showErrorBox('Prisma Type Error', `Loaded PrismaClient is ${typeStr}, expected function.\nPath: ${clientPath} `);
         }
 
     } else {
@@ -51,6 +51,41 @@ try {
 }
 
 let prisma: any; // Type as any to avoid TS errors with dynamic require
+
+// --- System Safety ---
+const recentBills = new Set<string>();
+let saleCounterSinceLastBackup = 0;
+
+async function performAutoBackup() {
+    try {
+        const dbPath = path.join(process.resourcesPath || app.getAppPath(), 'prisma', 'pos.db');
+        const actualDbPath = fs.existsSync(dbPath) ? dbPath : path.join(app.getPath('userData'), 'pos.db');
+
+        if (!fs.existsSync(actualDbPath)) return;
+
+        const backupDir = path.join(app.getPath('userData'), 'backups');
+        if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = path.join(backupDir, `backup-${timestamp}.db`);
+
+        fs.copyFileSync(actualDbPath, backupPath);
+        console.log(`[Backup] Created: ${backupPath}`);
+
+        // Keep last 10 backups
+        const files = fs.readdirSync(backupDir)
+            .filter(f => f.startsWith('backup-'))
+            .map(f => ({ name: f, time: fs.statSync(path.join(backupDir, f)).mtime.getTime() }))
+            .sort((a, b) => b.time - a.time);
+
+        if (files.length > 10) {
+            files.slice(10).forEach(f => fs.unlinkSync(path.join(backupDir, f.name)));
+        }
+    } catch (err) {
+        console.error('Auto-backup failed:', err);
+    }
+}
+// ---------------------
 
 function getDatabasePath() {
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -140,7 +175,7 @@ async function restoreDatabaseFromSource(sourcePath: string, targetPath: string)
     prisma = new PrismaClient({
         datasources: {
             db: {
-                url: `file:${targetPath}`
+                url: `file:${targetPath} `
             }
         }
     });
@@ -149,7 +184,7 @@ async function restoreDatabaseFromSource(sourcePath: string, targetPath: string)
 async function ensureSchemaUpdated() {
     try {
         const tableRows: any[] = await prisma.$queryRawUnsafe(
-            `SELECT name FROM sqlite_master WHERE type='table' AND lower(name) IN ('user','users')`
+            `SELECT name FROM sqlite_master WHERE type = 'table' AND lower(name) IN('user', 'users')`
         );
         const userTable = tableRows?.[0]?.name || 'User';
 
@@ -183,7 +218,7 @@ async function ensureSchemaUpdated() {
             if (!hasColumn(col.name)) {
                 console.log(`Migrating database: Adding ${col.name} column...`);
                 await prisma.$executeRawUnsafe(
-                    `ALTER TABLE "${userTable}" ADD COLUMN ${col.name} ${col.type} DEFAULT ${col.defaultValue}`
+                    `ALTER TABLE "${userTable}" ADD COLUMN ${col.name} ${col.type} DEFAULT ${col.defaultValue} `
                 );
             }
         }
@@ -215,12 +250,21 @@ async function ensureDefaultAdmin() {
 
 async function initializePrisma() {
     let dbPath = getDatabasePath();
-    console.log('Initializing database at:', dbPath);
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+    console.log('--- DATABASE DIAGNOSTICS ---');
+    console.log('Target DB Path:', dbPath);
+    if (isDev) {
+        const prodPath = path.join(app.getPath('userData'), 'pos.db');
+        console.log('Production DB Path (for reference):', prodPath);
+        console.log('Note: Running in DEV mode uses the project folder DB by default.');
+    }
+    console.log('---------------------------');
 
     prisma = new PrismaClient({
         datasources: {
             db: {
-                url: `file:${dbPath}`
+                url: `file:${dbPath} `
             }
         }
     });
@@ -230,7 +274,7 @@ async function initializePrisma() {
     // ---------------------------------------------------------
     try {
         const userCount = await prisma.user.count();
-        console.log(`Database User Count: ${userCount}`);
+        console.log(`Database User Count: ${userCount} `);
 
         if (app.isPackaged) {
             const candidates = getRestoreCandidates().filter(p => fs.existsSync(p));
@@ -245,7 +289,7 @@ async function initializePrisma() {
                 if (!sourcePath) {
                     console.warn('No restore candidates found. Cannot auto-restore.');
                 } else {
-                    console.log(`Overwriting ${dbPath} with ${sourcePath}`);
+                    console.log(`Overwriting ${dbPath} with ${sourcePath} `);
                     await restoreDatabaseFromSource(sourcePath, dbPath);
                     console.log('✅ Database auto-restored successfully.');
                 }
@@ -310,7 +354,7 @@ function createWindow() {
     // Add deep debugging listeners
     mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
         dialog.showErrorBox('Renderer Load Failed',
-            `Code: ${errorCode}\nDescription: ${errorDescription}\nURL: ${validatedURL}`);
+            `Code: ${errorCode} \nDescription: ${errorDescription} \nURL: ${validatedURL} `);
     });
 
     mainWindow.webContents.on('crashed', () => {
@@ -336,7 +380,7 @@ function createWindow() {
             // mainWindow.webContents.openDevTools();
 
             if (!fs.existsSync(indexPath)) {
-                dialog.showErrorBox('Critical Error', `File not found: ${indexPath}`);
+                dialog.showErrorBox('Critical Error', `File not found: ${indexPath} `);
             }
 
             mainWindow.loadFile(indexPath).catch(err => {
@@ -370,7 +414,7 @@ app.whenReady().then(async () => {
         if (syncConfig && syncConfig.value) {
             const config = JSON.parse(syncConfig.value);
             if (config.intervalMinutes > 0) {
-                console.log(`Starting auto-sync every ${config.intervalMinutes} minutes`);
+                console.log(`Starting auto - sync every ${config.intervalMinutes} minutes`);
                 syncInterval = setInterval(runCloudSync, config.intervalMinutes * 60 * 1000);
             }
         }
@@ -395,44 +439,6 @@ app.whenReady().then(async () => {
 });
 
 
-
-const performAutoBackup = async () => {
-    try {
-        const dbPath = getDatabasePath();
-        const backupDir = path.join(app.getPath('userData'), 'backups');
-        if (!fs.existsSync(backupDir)) {
-            fs.mkdirSync(backupDir, { recursive: true });
-        }
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const backupPath = path.join(backupDir, `backup-${timestamp}.db`);
-
-        fs.copyFileSync(dbPath, backupPath);
-        console.log('Auto-backup created at:', backupPath);
-
-        // Maintain a stable "latest" backup in userData
-        const latestPath = getUserDataLatestBackupPath();
-        fs.copyFileSync(dbPath, latestPath);
-
-        // Maintain a durable backup in Documents (survives reinstall if user keeps it)
-        const persistentPath = getPersistentBackupPath();
-        const persistentDir = path.dirname(persistentPath);
-        if (!fs.existsSync(persistentDir)) {
-            fs.mkdirSync(persistentDir, { recursive: true });
-        }
-        fs.copyFileSync(dbPath, persistentPath);
-
-        // Prune old backups (keep last 10)
-        const files = fs.readdirSync(backupDir).filter(f => f.endsWith('.db')).sort();
-        if (files.length > 10) {
-            for (let i = 0; i < files.length - 10; i++) {
-                fs.unlinkSync(path.join(backupDir, files[i]));
-            }
-        }
-    } catch (error) {
-        console.error('Auto-backup failed:', error);
-    }
-};
 
 app.on('window-all-closed', async () => {
     // Attempt Backup on Close
@@ -481,7 +487,7 @@ ipcMain.handle('backup:configure', async (_event, config) => {
         if (backupInterval) clearInterval(backupInterval);
 
         if (config.enabled && config.intervalMinutes > 0) {
-            console.log(`Starting auto-backup every ${config.intervalMinutes} minutes`);
+            console.log(`Starting auto - backup every ${config.intervalMinutes} minutes`);
             backupInterval = setInterval(async () => {
                 await performAutoBackup();
             }, config.intervalMinutes * 60 * 1000);
@@ -533,7 +539,7 @@ ipcMain.handle('cloud:configure', async (_event, { intervalMinutes }) => {
     if (syncInterval) clearInterval(syncInterval);
 
     if (intervalMinutes > 0) {
-        console.log(`Starting auto-sync every ${intervalMinutes} minutes`);
+        console.log(`Starting auto - sync every ${intervalMinutes} minutes`);
         syncInterval = setInterval(runCloudSync, intervalMinutes * 60 * 1000);
     }
 
@@ -546,12 +552,21 @@ ipcMain.handle('cloud:configure', async (_event, { intervalMinutes }) => {
 });
 ipcMain.handle('db:query', async (_event, { model, method, args }) => {
     try {
+        // Accounting Safety Rule: Prevent direct update/delete on Sale/AuditLog/InventoryMovement
+        const restrictedModels = ['sale', 'auditLog', 'inventoryMovement', 'exchange', 'refund'];
+        const restrictedMethods = ['update', 'updateMany', 'delete', 'deleteMany', 'upsert'];
+
+        if (restrictedModels.includes(model.toLowerCase()) && restrictedMethods.includes(method)) {
+            // Allow only specific status updates if absolutely necessary, but generally block
+            if (!(model.toLowerCase() === 'sale' && method === 'update' && args.data?.status === 'VOIDED')) {
+                throw new Error(`Accounting Rule Violation: Direct ${method} on ${model} is not allowed.`);
+            }
+        }
+
         const result = await (prisma as any)[model][method](args);
 
         // Auto-Trigger Cloud Sync for Sales
         if (model === 'sale' && (method === 'create' || method === 'update')) {
-            console.log('Queueing sale for background sync...');
-            // Queue the sale for background sync (Offline-first approach)
             cloudSync.queueSale(result).catch(err => console.error('Queue Error:', err));
         }
 
@@ -585,70 +600,404 @@ ipcMain.handle('settings:set', async (_event, key: string, value: string) => {
     }
 });
 
-// Get next bill number
+// Helper for Local Timestamp (Fixes 5:30 AM Bug)
+function getLocalISOString() {
+    const tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+    const localISOTime = (new Date(Date.now() - tzoffset)).toISOString().slice(0, -1);
+    return localISOTime;
+}
+
+// Bill Number Generation
 ipcMain.handle('sales:getNextBillNo', async () => {
     try {
         const lastSale = await prisma.sale.findFirst({
             orderBy: { billNo: 'desc' },
-            select: { billNo: true },
+            select: { billNo: true }
         });
         return { success: true, data: (lastSale?.billNo || 0) + 1 };
     } catch (error: any) {
+        console.error('Failed to get next bill number:', error);
         return { success: false, error: error.message };
     }
+});
+
+// Sale Checkout (Transaction Support + Mixed Payments)
+ipcMain.handle('sales:checkout', async (_event, saleData) => {
+    // 0. Safety Rule: Prevent Duplicate Bill submission within 30 seconds
+    if (recentBills.has(saleData.billNo)) {
+        console.error(`Duplicate Bill #${saleData.billNo} detected. Blocking.`);
+        return { success: false, error: "Duplicate checkout blocked." };
+    }
+    recentBills.add(saleData.billNo);
+    setTimeout(() => recentBills.delete(saleData.billNo), 30000); // Clear after 30s
+
+    return await prisma.$transaction(async (tx: any) => {
+        try {
+            const createdAt = saleData.createdAt ? new Date(saleData.createdAt) : new Date();
+
+            // 1. Create Sale
+            const sale = await tx.sale.create({
+                data: {
+                    billNo: saleData.billNo,
+                    userId: saleData.userId,
+                    customerName: saleData.customerName,
+                    customerPhone: saleData.customerPhone,
+                    subtotal: saleData.subtotal,
+                    discount: saleData.discount,
+                    discountPercent: saleData.discountPercent || 0,
+                    taxAmount: saleData.taxAmount,
+                    cgst: saleData.cgst,
+                    sgst: saleData.sgst,
+                    grandTotal: saleData.grandTotal,
+                    paymentMethod: saleData.paymentMethod, // Main method for display
+                    paidAmount: saleData.paidAmount,
+                    changeAmount: saleData.changeAmount,
+                    remarks: saleData.remarks,
+                    createdAt: createdAt,
+                    items: {
+                        create: saleData.items.map((item: any) => ({
+                            variantId: item.variantId,
+                            productName: item.productName,
+                            variantInfo: item.variantInfo,
+                            quantity: item.quantity,
+                            mrp: item.mrp,
+                            sellingPrice: item.sellingPrice,
+                            discount: item.discount,
+                            taxRate: item.taxRate,
+                            taxAmount: item.taxAmount,
+                            total: item.total,
+                        })),
+                    },
+                    payments: {
+                        create: saleData.payments || [{
+                            paymentMode: saleData.paymentMethod,
+                            amount: saleData.grandTotal
+                        }]
+                    }
+                },
+                include: { items: true, payments: true }
+            });
+
+            // 2. Update Stock and Inventory Movements
+            for (const item of saleData.items) {
+                await tx.productVariant.update({
+                    where: { id: item.variantId },
+                    data: { stock: { decrement: item.quantity } }
+                });
+
+                await tx.inventoryMovement.create({
+                    data: {
+                        variantId: item.variantId,
+                        type: 'OUT',
+                        quantity: -item.quantity,
+                        reason: 'Sale',
+                        reference: sale.id,
+                        createdBy: saleData.userId,
+                        createdAt: createdAt
+                    }
+                });
+            }
+
+            // 3. Log Activity
+            await tx.auditLog.create({
+                data: {
+                    action: 'SALE_CREATE',
+                    details: `New Sale #${sale.billNo} Created. Total: ₹${sale.grandTotal.toFixed(2)}. Customer: ${sale.customerName || 'Walk-in'}`,
+                    userId: saleData.userId,
+                    createdAt: createdAt
+                }
+            });
+
+            // Trigger Backup every 10 sales
+            saleCounterSinceLastBackup++;
+            if (saleCounterSinceLastBackup >= 10) {
+                performAutoBackup();
+                saleCounterSinceLastBackup = 0;
+            }
+
+            return { success: true, data: sale };
+        } catch (error: any) {
+            console.error('Checkout failed:', error);
+            throw error; // Transaction will rollback
+        }
+    });
+});
+
+// Update Payment for Existing Sale
+ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, userId }) => {
+    return await prisma.$transaction(async (tx: any) => {
+        try {
+            // 1. Verify Permission
+            const user = await tx.user.findUnique({ where: { id: userId } });
+            if (user?.role !== 'ADMIN' && !user?.permChangePayment) {
+                throw new Error("Unauthorized: You do not have permission to change payment modes.");
+            }
+
+            // 2. Fetch Original Sale
+            const originalSale = await tx.sale.findUnique({
+                where: { id: saleId },
+                include: { payments: true }
+            });
+            if (!originalSale) throw new Error("Sale not found.");
+
+            // 3. Update Sale Record
+            const updatedSale = await tx.sale.update({
+                where: { id: saleId },
+                data: {
+                    paymentMethod: paymentData.paymentMethod,
+                    paidAmount: paymentData.paidAmount,
+                    changeAmount: paymentData.changeAmount,
+                }
+            });
+
+            // 4. Update Payments (Delete and Re-create)
+            await tx.invoicePayment.deleteMany({ where: { saleId } });
+            await tx.invoicePayment.createMany({
+                data: (paymentData.payments || []).map((p: any) => ({
+                    saleId: saleId,
+                    paymentMode: p.paymentMode,
+                    amount: p.amount
+                }))
+            });
+
+            // 5. Log Activity
+            await tx.auditLog.create({
+                data: {
+                    action: 'PAYMENT_UPDATE',
+                    details: `Payment updated for Sale #${originalSale.billNo}. Old Method: ${originalSale.paymentMethod}, New Method: ${paymentData.paymentMethod}`,
+                    userId: userId
+                }
+            });
+
+            // 6. Return refreshed sale
+            return {
+                success: true,
+                data: await tx.sale.findUnique({
+                    where: { id: saleId },
+                    include: { items: true, payments: true }
+                })
+            };
+        } catch (error: any) {
+            console.error('Update Payment failed:', error);
+            return { success: false, error: error.message };
+        }
+    });
+});
+
+// Professional Exchange Handler
+ipcMain.handle('sales:exchange', async (_event, exchangeData) => {
+    return await prisma.$transaction(async (tx: any) => {
+        try {
+            const now = new Date();
+
+            // 1. Create Exchange Entry
+            const exchange = await tx.exchange.create({
+                data: {
+                    originalInvoiceId: exchangeData.originalInvoiceId,
+                    exchangeDate: now,
+                    differenceAmount: exchangeData.differenceAmount,
+                    notes: exchangeData.notes,
+                    createdBy: exchangeData.userId,
+                    items: {
+                        create: exchangeData.items.map((item: any) => ({
+                            returnedItemId: item.returnedId,
+                            returnedQty: item.returnedQty,
+                            newItemId: item.newId,
+                            newQty: item.newQty,
+                            priceDiff: item.priceDiff
+                        }))
+                    },
+                    payments: {
+                        create: exchangeData.payments || []
+                    }
+                }
+            });
+
+            // 2. Adjust Stock for each item
+            for (const item of exchangeData.items) {
+                // Returned Item -> Increase Stock
+                if (item.returnedId) {
+                    await tx.productVariant.update({
+                        where: { id: item.returnedId },
+                        data: { stock: { increment: item.returnedQty || 0 } }
+                    });
+                    await tx.inventoryMovement.create({
+                        data: {
+                            variantId: item.returnedId,
+                            type: 'EXCHANGE_RETURN',
+                            quantity: item.returnedQty || 0,
+                            reason: 'Exchange Return',
+                            reference: exchange.id,
+                            createdBy: exchangeData.userId,
+                            createdAt: now
+                        }
+                    });
+                }
+
+                // New Item -> Decrease Stock
+                if (item.newId) {
+                    await tx.productVariant.update({
+                        where: { id: item.newId },
+                        data: { stock: { decrement: item.newQty || 0 } }
+                    });
+                    await tx.inventoryMovement.create({
+                        data: {
+                            variantId: item.newId,
+                            type: 'EXCHANGE_OUT',
+                            quantity: -(item.newQty || 0),
+                            reason: 'Exchange Issue',
+                            reference: exchange.id,
+                            createdBy: exchangeData.userId,
+                            createdAt: now
+                        }
+                    });
+                }
+            }
+
+            // 3. Log Activity
+            await tx.auditLog.create({
+                data: {
+                    action: 'EXCHANGE',
+                    details: `Exchange processed for Invoice ID ${exchangeData.originalInvoiceId}.Diff: ₹${exchangeData.differenceAmount.toFixed(2)} `,
+                    userId: exchangeData.userId,
+                    createdAt: now
+                }
+            });
+
+            return { success: true, data: exchange };
+        } catch (error: any) {
+            console.error('Exchange failed:', error);
+            throw error;
+        }
+    });
+});
+
+// Professional Refund Handler
+ipcMain.handle('sales:refund', async (_event, refundData) => {
+    return await prisma.$transaction(async (tx: any) => {
+        try {
+            const now = new Date();
+
+            // 1. Create Refund Record
+            const refund = await tx.refund.create({
+                data: {
+                    originalInvoiceId: refundData.originalInvoiceId,
+                    refundDate: now,
+                    totalRefundAmount: refundData.totalAmount,
+                    reason: refundData.reason,
+                    createdBy: refundData.userId,
+                    items: {
+                        create: refundData.items.map((item: any) => ({
+                            variantId: item.id,
+                            quantity: item.qty,
+                            amount: item.amount
+                        }))
+                    },
+                    payments: {
+                        create: refundData.payments || []
+                    }
+                }
+            });
+
+            // 2. Adjust Stock
+            for (const item of refundData.items) {
+                await tx.productVariant.update({
+                    where: { id: item.id },
+                    data: { stock: { increment: item.qty } }
+                });
+                await tx.inventoryMovement.create({
+                    data: {
+                        variantId: item.id,
+                        type: 'REFUND',
+                        quantity: item.qty,
+                        reason: `Refund: ${refundData.reason} `,
+                        reference: refund.id,
+                        createdBy: refundData.userId,
+                        createdAt: now
+                    }
+                });
+            }
+
+            // 3. Log Activity
+            await tx.auditLog.create({
+                data: {
+                    action: 'REFUND',
+                    details: `Refund processed for Invoice ID ${refundData.originalInvoiceId}.Amount: ₹${refundData.totalAmount.toFixed(2)}.Reason: ${refundData.reason} `,
+                    userId: refundData.userId,
+                    createdAt: now
+                }
+            });
+
+            return { success: true, data: refund };
+        } catch (error: any) {
+            console.error('Refund failed:', error);
+            throw error;
+        }
+    });
 });
 
 // Print handlers
 
 ipcMain.handle('print:receipt', async (_event, data) => {
-    const printWindow = new BrowserWindow({
-        show: false,
-        width: 302,
-        webPreferences: { nodeIntegration: true }
-    });
-
-    const htmlContent = typeof data === 'string' ? data : data.html;
-
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
-
-    return new Promise((resolve) => {
-        printWindow.webContents.print({
-            silent: true,
-            printBackground: true,
-            margins: { marginType: 'none' }
-        }, (success, failureReason) => {
-            printWindow.close();
-            if (!success) {
-                console.error('Print failed:', failureReason);
-                resolve({ success: false, error: failureReason });
-            } else {
-                resolve({ success: true });
-            }
+    try {
+        const printWindow = new BrowserWindow({
+            show: false,
+            width: 302,
+            webPreferences: { nodeIntegration: false, contextIsolation: true }
         });
-    });
+
+        const htmlContent = typeof data === 'string' ? data : data.html;
+
+        // Strip any leading/trailing whitespace and fix malformed data URI prefix
+        await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent.trim())}`);
+
+        return new Promise((resolve) => {
+            printWindow.webContents.print({
+                silent: true,
+                printBackground: true,
+                margins: { marginType: 'none' }
+            }, (success, failureReason) => {
+                printWindow.close();
+                if (!success) {
+                    console.error('Print failed:', failureReason);
+                    resolve({ success: false, error: failureReason });
+                } else {
+                    resolve({ success: true });
+                }
+            });
+        });
+    } catch (error: any) {
+        console.error('Print:Receipt Error:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 ipcMain.handle('print:label', async (_event, data) => {
-    const printWindow = new BrowserWindow({ show: false });
-    const htmlContent = data.html || data;
+    try {
+        const printWindow = new BrowserWindow({ show: false });
+        const htmlContent = data.html || data;
 
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+        await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent.trim())}`);
 
-    return new Promise((resolve) => {
-        printWindow.webContents.print({
-            silent: true,
-            printBackground: true,
-            margins: { marginType: 'none' }
-        }, (success, failureReason) => {
-            printWindow.close();
-            if (!success) {
-                console.error('Label print failed:', failureReason);
-                resolve({ success: false, error: failureReason });
-            } else {
-                resolve({ success: true });
-            }
+        return new Promise((resolve) => {
+            printWindow.webContents.print({
+                silent: true,
+                printBackground: true,
+                margins: { marginType: 'none' }
+            }, (success, failureReason) => {
+                printWindow.close();
+                if (!success) {
+                    console.error('Label print failed:', failureReason);
+                    resolve({ success: false, error: failureReason });
+                } else {
+                    resolve({ success: true });
+                }
+            });
         });
-    });
+    } catch (error: any) {
+        console.error('Print:Label Error:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 // Global error handling was moved to the top
@@ -886,8 +1235,8 @@ ipcMain.handle('products:import', async () => {
                         productId: product.id,
                         size: getVal(row, ['Size'])?.toString() || 'Standard',
                         color: getVal(row, ['Color'])?.toString(),
-                        barcode: barcode || `GEN-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                        sku: `${productName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`,
+                        barcode: barcode || `GEN - ${Date.now()} -${Math.random().toString(36).substr(2, 5)} `,
+                        sku: `${productName.substring(0, 3).toUpperCase()} -${Date.now().toString().slice(-6)} `,
                         mrp: parseFloat(getVal(row, ['MRP', 'Rate', 'Price']) || '0'),
                         sellingPrice: parseFloat(getVal(row, ['Selling Price', 'Sale Price', 'Selling_Price', 'Sale_Price', 'Price']) || '0'),
                         costPrice: parseFloat(getVal(row, ['Purchase Price', 'Purchase_Price', 'Cost']) || '0'),
@@ -898,7 +1247,7 @@ ipcMain.handle('products:import', async () => {
                 stats.success++;
             } catch (err: any) {
                 stats.errors++;
-                stats.details.push(`Error on row: ${err.message}`);
+                stats.details.push(`Error on row: ${err.message} `);
                 console.error(err);
             }
         }
@@ -906,7 +1255,7 @@ ipcMain.handle('products:import', async () => {
         dialog.showMessageBoxSync({
             type: stats.errors > 0 ? 'warning' : 'info',
             title: 'Import Complete',
-            message: `Products imported.\n\nSuccess: ${stats.success}\nSkipped: ${stats.skipped}\nErrors: ${stats.errors}`
+            message: `Products imported.\n\nSuccess: ${stats.success} \nSkipped: ${stats.skipped} \nErrors: ${stats.errors} `
         });
 
         return { success: true, stats };
@@ -995,8 +1344,8 @@ ipcMain.handle('data:importAll', async () => {
                             productId: product.id,
                             size: getVal(row, ['Size'])?.toString() || 'Standard',
                             color: getVal(row, ['Color'])?.toString(),
-                            barcode: barcode || `GEN-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                            sku: `${productName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`,
+                            barcode: barcode || `GEN - ${Date.now()} -${Math.random().toString(36).substr(2, 5)} `,
+                            sku: `${productName.substring(0, 3).toUpperCase()} -${Date.now().toString().slice(-6)} `,
                             mrp: parseFloat(getVal(row, ['MRP', 'Rate', 'Price']) || '0'),
                             sellingPrice: parseFloat(getVal(row, ['Selling Price', 'Sale Price', 'Selling_Price', 'Sale_Price', 'Price']) || '0'),
                             costPrice: parseFloat(getVal(row, ['Purchase Price', 'Purchase_Price', 'Cost']) || '0'),
@@ -1121,7 +1470,7 @@ ipcMain.handle('data:importAll', async () => {
         dialog.showMessageBoxSync({
             type: summary.errors > 0 ? 'warning' : 'info',
             title: 'Import Complete',
-            message: `Import finished.\n\nProducts: ${summary.products}\nCustomers: ${summary.customers}\nSales: ${summary.sales}\nSkipped: ${summary.skipped}\nErrors: ${summary.errors}`
+            message: `Import finished.\n\nProducts: ${summary.products} \nCustomers: ${summary.customers} \nSales: ${summary.sales} \nSkipped: ${summary.skipped} \nErrors: ${summary.errors} `
         });
 
         return { success: true };
@@ -1172,7 +1521,7 @@ ipcMain.handle('db:restore', async () => {
         // Use the CENTRAL TRUTH for database path
         const targetPath = getDatabasePath();
 
-        console.log(`Resoring database from ${backupPath} to ${targetPath}`);
+        console.log(`Resoring database from ${backupPath} to ${targetPath} `);
 
         await prisma.$disconnect();
 
@@ -1206,7 +1555,7 @@ ipcMain.handle('db:restore', async () => {
         dialog.showMessageBoxSync({
             type: 'info',
             title: 'Restore Complete',
-            message: `Restore finished.\n\nUsers: ${userCount}\nProducts: ${productCount}\nSales: ${saleCount}`
+            message: `Restore finished.\n\nUsers: ${userCount} \nProducts: ${productCount} \nSales: ${saleCount} `
         });
 
         // Smart Restart Logic

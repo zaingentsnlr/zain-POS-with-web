@@ -129,18 +129,18 @@ export const reportsService = {
         }>();
 
         saleItems.forEach((item: any) => {
-            const key = item.variant.productId;
+            const key = item.variant?.productId || 'UNKNOWN';
             const existing = productMap.get(key);
 
             if (existing) {
-                existing.totalQuantity += item.quantity;
-                existing.totalRevenue += item.total;
+                existing.totalQuantity += (item.quantity || 0);
+                existing.totalRevenue += (item.total || 0);
             } else {
                 productMap.set(key, {
                     productId: key,
-                    productName: item.productName,
-                    totalQuantity: item.quantity,
-                    totalRevenue: item.total,
+                    productName: item.productName || 'Unknown Product',
+                    totalQuantity: item.quantity || 0,
+                    totalRevenue: item.total || 0,
                 });
             }
         });

@@ -29,6 +29,11 @@ const api = {
     // Sales
     sales: {
         getNextBillNo: () => ipcRenderer.invoke('sales:getNextBillNo'),
+        checkout: (data: any) => ipcRenderer.invoke('sales:checkout', data),
+        updatePayment: (data: { saleId: string, paymentData: any, userId: string }) =>
+            ipcRenderer.invoke('sales:updatePayment', data),
+        exchange: (data: any) => ipcRenderer.invoke('sales:exchange', data),
+        refund: (data: any) => ipcRenderer.invoke('sales:refund', data),
     },
 
     // Printing

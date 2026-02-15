@@ -30,6 +30,10 @@ interface ReceiptData {
   paymentMethod: string;
   paidAmount: number;
   changeAmount: number;
+  payments?: Array<{
+    paymentMode: string;
+    amount: number;
+  }>;
   userName: string;
 }
 
@@ -222,7 +226,10 @@ export const printService = {
                                         <td align="right" style="padding: 5px 0;">NET AMOUNT:</td>
                                         <td align="right" style="padding: 5px 0;">₹${data.grandTotal.toFixed(2)}</td>
                                     </tr>
-                                    <tr><td align="right" style="padding-top: 5px;">Paid:</td><td align="right" style="padding-top: 5px;">${data.paidAmount?.toFixed(2) || '0.00'}</td></tr>
+                                    ${data.payments && data.payments.length > 1
+                ? data.payments.map(p => `<tr><td align="right">${p.paymentMode}:</td><td align="right">${p.amount.toFixed(2)}</td></tr>`).join('')
+                : `<tr><td align="right" style="padding-top: 5px;">Paid (${data.paymentMethod}):</td><td align="right" style="padding-top: 5px;">${data.paidAmount?.toFixed(2) || '0.00'}</td></tr>`
+              }
                                     <tr><td align="right">Change:</td><td align="right">${data.changeAmount?.toFixed(2) || '0.00'}</td></tr>
                                 </table>
                             </div>

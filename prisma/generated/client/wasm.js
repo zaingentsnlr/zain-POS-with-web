@@ -220,6 +220,66 @@ exports.Prisma.SaleScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.InvoicePaymentScalarFieldEnum = {
+  id: 'id',
+  saleId: 'saleId',
+  paymentMode: 'paymentMode',
+  amount: 'amount',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ExchangeScalarFieldEnum = {
+  id: 'id',
+  originalInvoiceId: 'originalInvoiceId',
+  exchangeDate: 'exchangeDate',
+  differenceAmount: 'differenceAmount',
+  notes: 'notes',
+  createdBy: 'createdBy'
+};
+
+exports.Prisma.ExchangeItemScalarFieldEnum = {
+  id: 'id',
+  exchangeId: 'exchangeId',
+  returnedItemId: 'returnedItemId',
+  returnedQty: 'returnedQty',
+  newItemId: 'newItemId',
+  newQty: 'newQty',
+  priceDiff: 'priceDiff'
+};
+
+exports.Prisma.ExchangePaymentScalarFieldEnum = {
+  id: 'id',
+  exchangeId: 'exchangeId',
+  paymentMode: 'paymentMode',
+  amount: 'amount',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.RefundScalarFieldEnum = {
+  id: 'id',
+  originalInvoiceId: 'originalInvoiceId',
+  refundDate: 'refundDate',
+  totalRefundAmount: 'totalRefundAmount',
+  reason: 'reason',
+  createdBy: 'createdBy'
+};
+
+exports.Prisma.RefundItemScalarFieldEnum = {
+  id: 'id',
+  refundId: 'refundId',
+  variantId: 'variantId',
+  quantity: 'quantity',
+  amount: 'amount'
+};
+
+exports.Prisma.RefundPaymentScalarFieldEnum = {
+  id: 'id',
+  refundId: 'refundId',
+  paymentMode: 'paymentMode',
+  amount: 'amount',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.SaleItemScalarFieldEnum = {
   id: 'id',
   saleId: 'saleId',
@@ -303,6 +363,13 @@ exports.Prisma.ModelName = {
   ProductVariant: 'ProductVariant',
   Customer: 'Customer',
   Sale: 'Sale',
+  InvoicePayment: 'InvoicePayment',
+  Exchange: 'Exchange',
+  ExchangeItem: 'ExchangeItem',
+  ExchangePayment: 'ExchangePayment',
+  Refund: 'Refund',
+  RefundItem: 'RefundItem',
+  RefundPayment: 'RefundPayment',
   SaleItem: 'SaleItem',
   AuditLog: 'AuditLog',
   InventoryMovement: 'InventoryMovement',

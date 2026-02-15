@@ -99,14 +99,14 @@ export const Dashboard: React.FC = () => {
                 const hours = Array.from({ length: 24 }, (_, i) => i);
 
                 const hourlyData = hours.map(hour => {
-                    const hourSales = todayReport.sales.filter((sale: any) => {
+                    const hourSales = (todayReport?.sales || []).filter((sale: any) => {
                         const saleHour = new Date(sale.createdAt).getHours();
                         return saleHour === hour;
                     });
 
                     return {
                         date: `${hour}:00`,
-                        sales: hourSales.reduce((sum: number, sale: any) => sum + sale.grandTotal, 0),
+                        sales: hourSales.reduce((sum: number, sale: any) => sum + (sale.grandTotal || 0), 0),
                         bills: hourSales.length,
                     };
                 });

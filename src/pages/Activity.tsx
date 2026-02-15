@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { auditService } from '../services/audit.service';
 import { useAuthStore } from '../store/authStore';
 import { format } from 'date-fns';
-import { Activity, Search, RefreshCw, User, ShieldAlert, ArrowRight, DollarSign, Clock, Tag } from 'lucide-react';
+import { Activity, Search, RefreshCw, User, ShieldAlert, ArrowRight, DollarSign, Clock, Tag, Undo2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -46,6 +46,8 @@ export const ActivityPage: React.FC = () => {
         'SALE_CREATE': { color: 'bg-green-100 text-green-700 border-green-200', icon: DollarSign },
         'SALE_UPDATE': { color: 'bg-blue-100 text-blue-700 border-blue-200', icon: RefreshCw },
         'SALE_VOID': { color: 'bg-red-100 text-red-700 border-red-200', icon: ShieldAlert },
+        'EXCHANGE': { color: 'bg-orange-100 text-orange-700 border-orange-200', icon: ArrowRight },
+        'REFUND': { color: 'bg-rose-100 text-rose-700 border-rose-200', icon: Undo2 },
         'STOCK_ADD': { color: 'bg-purple-100 text-purple-700 border-purple-200', icon: Tag },
         'STOCK_ADJUST': { color: 'bg-orange-100 text-orange-700 border-orange-200', icon: Tag },
         'PRODUCT_DELETE': { color: 'bg-red-100 text-red-700 border-red-200', icon: Activity },
@@ -53,47 +55,32 @@ export const ActivityPage: React.FC = () => {
     };
 
     const filteredLogs = logs.filter(log =>
-        log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.user?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.action.toLowerCase().includes(searchQuery.toLowerCase())
+        (log.details?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (log.user?.name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (log.action?.toLowerCase() || '').includes(searchQuery.toLowerCase())
     );
 
     // Simple parser for detailed logs (like the new Exchange log)
     const renderParsedDetails = (details: string, action: string) => {
-        if (action === 'SALE_UPDATE' && details.includes('BEFORE:')) {
-            // Updated Sale #1 Updated (EXCHANGE). BEFORE: ₹10.00 | AFTER: ₹20.00 | DIFF: ₹10.00. Customer: Name
-            const parts = details.split('|');
-            const before = parts[0]?.split('BEFORE:')[1]?.trim();
-            const after = parts[1]?.split('AFTER:')[1]?.trim();
-            const diff = parts[2]?.split('DIFF:')[1]?.trim();
-            const customer = details.split('Customer:')[1]?.trim();
-            const billInfo = details.split('Updated')[0]?.trim();
-
+        if (action === 'EXCHANGE') {
+            // Exchange processed for Invoice ID ... Diff: ₹...
             return (
-                <div className="space-y-3 mt-2">
-                    <div className="flex items-center gap-2 font-medium text-blue-800 dark:text-blue-300">
-                        <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] uppercase">Exchange</span>
-                        {billInfo}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700">
-                            <div className="text-[10px] text-gray-400 uppercase font-bold">Previous</div>
-                            <div className="text-sm font-semibold text-gray-600 line-through">{before}</div>
-                        </div>
-                        <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700">
-                            <div className="text-[10px] text-gray-400 uppercase font-bold">New Total</div>
-                            <div className="text-sm font-semibold text-green-600">{after}</div>
-                        </div>
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded border border-blue-100 dark:border-blue-800">
-                            <div className="text-[10px] text-blue-400 uppercase font-bold">Difference</div>
-                            <div className="text-sm font-bold text-blue-600">{diff}</div>
-                        </div>
-                    </div>
-                    {customer && (
-                        <div className="text-xs text-gray-500 italic">
-                            Customer: {customer}
-                        </div>
-                    )}
+                <div className="mt-2 p-3 bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800 rounded-xl">
+                    <p className="text-sm font-bold text-orange-800 dark:text-orange-400 flex items-center gap-2">
+                        <ArrowRight className="w-4 h-4" /> Professional Exchange
+                    </p>
+                    <p className="text-xs text-orange-700 dark:text-orange-500 mt-1">{details}</p>
+                </div>
+            );
+        }
+
+        if (action === 'REFUND') {
+            return (
+                <div className="mt-2 p-3 bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-800 rounded-xl">
+                    <p className="text-sm font-bold text-rose-800 dark:text-rose-400 flex items-center gap-2">
+                        <Undo2 className="w-4 h-4" /> Professional Refund
+                    </p>
+                    <p className="text-xs text-rose-700 dark:text-rose-500 mt-1">{details}</p>
                 </div>
             );
         }
