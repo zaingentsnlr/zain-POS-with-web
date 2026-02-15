@@ -185,7 +185,7 @@ export default function Layout({ children }: LayoutProps) {
                             </Link>
                         );
                     })}
-                    })}
+
                 </nav>
             </div >
         </div >
