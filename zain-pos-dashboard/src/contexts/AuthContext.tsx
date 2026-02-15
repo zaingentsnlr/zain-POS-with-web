@@ -10,6 +10,7 @@ interface User {
 
 interface AuthContextType {
     user: User | null;
+    token: string | null;
     login: (username: string, password: string) => Promise<void>;
     logout: () => void;
     isLoading: boolean;
@@ -19,15 +20,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
+    const [token, setToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
+        const savedToken = localStorage.getItem('token');
         const savedUser = localStorage.getItem('user');
 
-        if (token && savedUser) {
+        if (savedToken && savedUser) {
             try {
                 setUser(JSON.parse(savedUser));
+                setToken(savedToken);
             } catch (e) {
                 console.error('Failed to parse saved user', e);
                 localStorage.removeItem('user');
@@ -44,16 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(user));
         setUser(user);
+        setToken(token);
     };
 
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
+        setToken(null);
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+        <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

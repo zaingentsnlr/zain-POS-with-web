@@ -21,8 +21,9 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sales    Sale[]
+  Sale     Sale[]
   AuditLog AuditLog[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Category {
@@ -176,4 +177,33 @@ model PrinterConfig {
   settings    String? // JSON string for additional settings
   isActive    Boolean  @default(true)
   updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  shopId      String   @map("shop_id")
+  type        String // sale | invoice_deleted | invoice_updated
+  title       String
+  message     String
+  referenceId String?  @map("reference_id")
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  metadata    Json? // paymentMode, reason, oldAmount, newAmount
+
+  @@index([shopId])
+  @@index([createdAt])
+  @@index([read])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique
+  keys      Json // p256dh, auth
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("push_subscriptions")
 }

@@ -12,6 +12,7 @@ import reportsRoutes from './routes/reports';
 import syncRoutes from './routes/sync';
 import maintenanceRoutes from './routes/maintenance';
 import activityRoutes from './routes/activity';
+import notificationRoutes from './routes/notifications';
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

@@ -1,8 +1,8 @@
-import { Link } from 'react-router-dom';
-import { Bell, Sun, Moon, LogOut } from 'lucide-react';
+import { Sun, Moon, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 interface MobileHeaderProps {
     darkMode: boolean;
@@ -19,12 +19,7 @@ export function MobileHeader({ darkMode, setDarkMode }: MobileHeaderProps) {
                     Zain POS
                 </h1>
                 <div className="flex items-center gap-1">
-                    <Link to="/activity">
-                        <Button variant="ghost" size="icon" className="relative text-gray-500">
-                            <Bell className="w-5 h-5" />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
-                        </Button>
-                    </Link>
+                    <NotificationBell />
 
                     <Button
                         variant="ghost"

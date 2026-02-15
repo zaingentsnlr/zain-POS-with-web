@@ -185,29 +185,32 @@ router.post('/sales', async (req, res) => {
 
         // BROADCAST TO DASHBOARD
         try {
-            const { getIO } = require('../socket'); // Dynamic import to ensure init
-            const { pushService } = require('../services/push.service');
+            const { getIO } = require('../socket');
+            const { notificationService } = require('../services/notificationService');
             const io = getIO();
 
-            // Emit batch update
+            // Emit batch update for realtime charts/stats
             io.to('shop_main').emit('sale:batch', { count: sales.length, sales, timestamp: new Date() });
 
-            // Send Push Notifications for RECENT sales (e.g., created in last 10 minutes)
-            // This prevents spamming notifications during historical sync
+            // Send Notifications for RECENT sales (e.g., created in last 10 minutes)
             const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
             for (const sale of sales) {
                 const saleDate = new Date(sale.createdAt);
-                if (saleDate > tenMinutesAgo) {
-                    // Send to 'main' shop (placeholder shopId)
-                    pushService.sendToShop('main', {
-                        title: 'New Sale Received',
-                        body: `Bill #${sale.billNo} - ₹${sale.grandTotal}`,
-                        url: '/invoices'
-                    });
 
-                    // Also emit single event for realtime UI toast
-                    io.to('shop_main').emit('new-sale', sale);
+                // NEW SALE
+                if (saleDate > tenMinutesAgo) {
+                    await notificationService.send({
+                        shopId: 'default-shop', // TODO: Use actual shopId if available
+                        type: 'sale',
+                        title: 'New Sale Received',
+                        message: `Bill #${sale.billNo} - ₹${sale.grandTotal}`,
+                        referenceId: sale.id,
+                        metadata: {
+                            amount: sale.grandTotal,
+                            paymentMode: sale.paymentMethod
+                        }
+                    });
                 }
             }
 
@@ -224,6 +227,28 @@ router.post('/sales', async (req, res) => {
                 userId: null // System action
             }
         });
+
+        // Check for Voided Sales in this batch (Invoice Deleted/Voided)
+        try {
+            const { notificationService } = require('../services/notificationService');
+            for (const sale of sales) {
+                if (sale.status === 'VOIDED' && new Date(sale.updatedAt) > new Date(Date.now() - 10 * 60 * 1000)) {
+                    await notificationService.send({
+                        shopId: 'default-shop',
+                        type: 'invoice_deleted',
+                        title: 'Invoice Voided',
+                        message: `Bill #${sale.billNo} was voided.`,
+                        referenceId: sale.id,
+                        metadata: {
+                            billNo: sale.billNo,
+                            reason: sale.remarks || 'No reason provided'
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("Notification trigger error:", e);
+        }
 
         res.json({ success: true, count: sales.length });
     } catch (error: any) {
