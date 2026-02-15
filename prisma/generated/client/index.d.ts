@@ -68,6 +68,11 @@ export type Setting = $Result.DefaultSelection<Prisma.$SettingPayload>
  * 
  */
 export type PrinterConfig = $Result.DefaultSelection<Prisma.$PrinterConfigPayload>
+/**
+ * Model SyncQueue
+ * 
+ */
+export type SyncQueue = $Result.DefaultSelection<Prisma.$SyncQueuePayload>
 
 /**
  * ##  Prisma Client ʲˢ
@@ -301,6 +306,16 @@ export class PrismaClient<
     * ```
     */
   get printerConfig(): Prisma.PrinterConfigDelegate<ExtArgs>;
+
+  /**
+   * `prisma.syncQueue`: Exposes CRUD operations for the **SyncQueue** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more SyncQueues
+    * const syncQueues = await prisma.syncQueue.findMany()
+    * ```
+    */
+  get syncQueue(): Prisma.SyncQueueDelegate<ExtArgs>;
 }
 
 export namespace Prisma {
@@ -752,7 +767,8 @@ export namespace Prisma {
     AuditLog: 'AuditLog',
     InventoryMovement: 'InventoryMovement',
     Setting: 'Setting',
-    PrinterConfig: 'PrinterConfig'
+    PrinterConfig: 'PrinterConfig',
+    SyncQueue: 'SyncQueue'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -768,7 +784,7 @@ export namespace Prisma {
 
   export type TypeMap<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, ClientOptions = {}> = {
     meta: {
-      modelProps: "user" | "category" | "product" | "productVariant" | "customer" | "sale" | "saleItem" | "auditLog" | "inventoryMovement" | "setting" | "printerConfig"
+      modelProps: "user" | "category" | "product" | "productVariant" | "customer" | "sale" | "saleItem" | "auditLog" | "inventoryMovement" | "setting" | "printerConfig" | "syncQueue"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -1539,6 +1555,76 @@ export namespace Prisma {
           count: {
             args: Prisma.PrinterConfigCountArgs<ExtArgs>
             result: $Utils.Optional<PrinterConfigCountAggregateOutputType> | number
+          }
+        }
+      }
+      SyncQueue: {
+        payload: Prisma.$SyncQueuePayload<ExtArgs>
+        fields: Prisma.SyncQueueFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.SyncQueueFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.SyncQueueFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>
+          }
+          findFirst: {
+            args: Prisma.SyncQueueFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.SyncQueueFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>
+          }
+          findMany: {
+            args: Prisma.SyncQueueFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>[]
+          }
+          create: {
+            args: Prisma.SyncQueueCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>
+          }
+          createMany: {
+            args: Prisma.SyncQueueCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.SyncQueueCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>[]
+          }
+          delete: {
+            args: Prisma.SyncQueueDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>
+          }
+          update: {
+            args: Prisma.SyncQueueUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>
+          }
+          deleteMany: {
+            args: Prisma.SyncQueueDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.SyncQueueUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          upsert: {
+            args: Prisma.SyncQueueUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$SyncQueuePayload>
+          }
+          aggregate: {
+            args: Prisma.SyncQueueAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateSyncQueue>
+          }
+          groupBy: {
+            args: Prisma.SyncQueueGroupByArgs<ExtArgs>
+            result: $Utils.Optional<SyncQueueGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.SyncQueueCountArgs<ExtArgs>
+            result: $Utils.Optional<SyncQueueCountAggregateOutputType> | number
           }
         }
       }
@@ -13235,6 +13321,964 @@ export namespace Prisma {
 
 
   /**
+   * Model SyncQueue
+   */
+
+  export type AggregateSyncQueue = {
+    _count: SyncQueueCountAggregateOutputType | null
+    _avg: SyncQueueAvgAggregateOutputType | null
+    _sum: SyncQueueSumAggregateOutputType | null
+    _min: SyncQueueMinAggregateOutputType | null
+    _max: SyncQueueMaxAggregateOutputType | null
+  }
+
+  export type SyncQueueAvgAggregateOutputType = {
+    retryCount: number | null
+  }
+
+  export type SyncQueueSumAggregateOutputType = {
+    retryCount: number | null
+  }
+
+  export type SyncQueueMinAggregateOutputType = {
+    id: string | null
+    action: string | null
+    model: string | null
+    data: string | null
+    status: string | null
+    retryCount: number | null
+    error: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type SyncQueueMaxAggregateOutputType = {
+    id: string | null
+    action: string | null
+    model: string | null
+    data: string | null
+    status: string | null
+    retryCount: number | null
+    error: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type SyncQueueCountAggregateOutputType = {
+    id: number
+    action: number
+    model: number
+    data: number
+    status: number
+    retryCount: number
+    error: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type SyncQueueAvgAggregateInputType = {
+    retryCount?: true
+  }
+
+  export type SyncQueueSumAggregateInputType = {
+    retryCount?: true
+  }
+
+  export type SyncQueueMinAggregateInputType = {
+    id?: true
+    action?: true
+    model?: true
+    data?: true
+    status?: true
+    retryCount?: true
+    error?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type SyncQueueMaxAggregateInputType = {
+    id?: true
+    action?: true
+    model?: true
+    data?: true
+    status?: true
+    retryCount?: true
+    error?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type SyncQueueCountAggregateInputType = {
+    id?: true
+    action?: true
+    model?: true
+    data?: true
+    status?: true
+    retryCount?: true
+    error?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type SyncQueueAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which SyncQueue to aggregate.
+     */
+    where?: SyncQueueWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SyncQueues to fetch.
+     */
+    orderBy?: SyncQueueOrderByWithRelationInput | SyncQueueOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: SyncQueueWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SyncQueues from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SyncQueues.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned SyncQueues
+    **/
+    _count?: true | SyncQueueCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: SyncQueueAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: SyncQueueSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: SyncQueueMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: SyncQueueMaxAggregateInputType
+  }
+
+  export type GetSyncQueueAggregateType<T extends SyncQueueAggregateArgs> = {
+        [P in keyof T & keyof AggregateSyncQueue]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateSyncQueue[P]>
+      : GetScalarType<T[P], AggregateSyncQueue[P]>
+  }
+
+
+
+
+  export type SyncQueueGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: SyncQueueWhereInput
+    orderBy?: SyncQueueOrderByWithAggregationInput | SyncQueueOrderByWithAggregationInput[]
+    by: SyncQueueScalarFieldEnum[] | SyncQueueScalarFieldEnum
+    having?: SyncQueueScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: SyncQueueCountAggregateInputType | true
+    _avg?: SyncQueueAvgAggregateInputType
+    _sum?: SyncQueueSumAggregateInputType
+    _min?: SyncQueueMinAggregateInputType
+    _max?: SyncQueueMaxAggregateInputType
+  }
+
+  export type SyncQueueGroupByOutputType = {
+    id: string
+    action: string
+    model: string
+    data: string
+    status: string
+    retryCount: number
+    error: string | null
+    createdAt: Date
+    updatedAt: Date
+    _count: SyncQueueCountAggregateOutputType | null
+    _avg: SyncQueueAvgAggregateOutputType | null
+    _sum: SyncQueueSumAggregateOutputType | null
+    _min: SyncQueueMinAggregateOutputType | null
+    _max: SyncQueueMaxAggregateOutputType | null
+  }
+
+  type GetSyncQueueGroupByPayload<T extends SyncQueueGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<SyncQueueGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof SyncQueueGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], SyncQueueGroupByOutputType[P]>
+            : GetScalarType<T[P], SyncQueueGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type SyncQueueSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    action?: boolean
+    model?: boolean
+    data?: boolean
+    status?: boolean
+    retryCount?: boolean
+    error?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["syncQueue"]>
+
+  export type SyncQueueSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    action?: boolean
+    model?: boolean
+    data?: boolean
+    status?: boolean
+    retryCount?: boolean
+    error?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["syncQueue"]>
+
+  export type SyncQueueSelectScalar = {
+    id?: boolean
+    action?: boolean
+    model?: boolean
+    data?: boolean
+    status?: boolean
+    retryCount?: boolean
+    error?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+
+  export type $SyncQueuePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "SyncQueue"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      action: string
+      model: string
+      data: string
+      status: string
+      retryCount: number
+      error: string | null
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["syncQueue"]>
+    composites: {}
+  }
+
+  type SyncQueueGetPayload<S extends boolean | null | undefined | SyncQueueDefaultArgs> = $Result.GetResult<Prisma.$SyncQueuePayload, S>
+
+  type SyncQueueCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = 
+    Omit<SyncQueueFindManyArgs, 'select' | 'include' | 'distinct'> & {
+      select?: SyncQueueCountAggregateInputType | true
+    }
+
+  export interface SyncQueueDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['SyncQueue'], meta: { name: 'SyncQueue' } }
+    /**
+     * Find zero or one SyncQueue that matches the filter.
+     * @param {SyncQueueFindUniqueArgs} args - Arguments to find a SyncQueue
+     * @example
+     * // Get one SyncQueue
+     * const syncQueue = await prisma.syncQueue.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends SyncQueueFindUniqueArgs>(args: SelectSubset<T, SyncQueueFindUniqueArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "findUnique"> | null, null, ExtArgs>
+
+    /**
+     * Find one SyncQueue that matches the filter or throw an error with `error.code='P2025'` 
+     * if no matches were found.
+     * @param {SyncQueueFindUniqueOrThrowArgs} args - Arguments to find a SyncQueue
+     * @example
+     * // Get one SyncQueue
+     * const syncQueue = await prisma.syncQueue.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends SyncQueueFindUniqueOrThrowArgs>(args: SelectSubset<T, SyncQueueFindUniqueOrThrowArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "findUniqueOrThrow">, never, ExtArgs>
+
+    /**
+     * Find the first SyncQueue that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SyncQueueFindFirstArgs} args - Arguments to find a SyncQueue
+     * @example
+     * // Get one SyncQueue
+     * const syncQueue = await prisma.syncQueue.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends SyncQueueFindFirstArgs>(args?: SelectSubset<T, SyncQueueFindFirstArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "findFirst"> | null, null, ExtArgs>
+
+    /**
+     * Find the first SyncQueue that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SyncQueueFindFirstOrThrowArgs} args - Arguments to find a SyncQueue
+     * @example
+     * // Get one SyncQueue
+     * const syncQueue = await prisma.syncQueue.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends SyncQueueFindFirstOrThrowArgs>(args?: SelectSubset<T, SyncQueueFindFirstOrThrowArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "findFirstOrThrow">, never, ExtArgs>
+
+    /**
+     * Find zero or more SyncQueues that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SyncQueueFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all SyncQueues
+     * const syncQueues = await prisma.syncQueue.findMany()
+     * 
+     * // Get first 10 SyncQueues
+     * const syncQueues = await prisma.syncQueue.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const syncQueueWithIdOnly = await prisma.syncQueue.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends SyncQueueFindManyArgs>(args?: SelectSubset<T, SyncQueueFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "findMany">>
+
+    /**
+     * Create a SyncQueue.
+     * @param {SyncQueueCreateArgs} args - Arguments to create a SyncQueue.
+     * @example
+     * // Create one SyncQueue
+     * const SyncQueue = await prisma.syncQueue.create({
+     *   data: {
+     *     // ... data to create a SyncQueue
+     *   }
+     * })
+     * 
+     */
+    create<T extends SyncQueueCreateArgs>(args: SelectSubset<T, SyncQueueCreateArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "create">, never, ExtArgs>
+
+    /**
+     * Create many SyncQueues.
+     * @param {SyncQueueCreateManyArgs} args - Arguments to create many SyncQueues.
+     * @example
+     * // Create many SyncQueues
+     * const syncQueue = await prisma.syncQueue.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends SyncQueueCreateManyArgs>(args?: SelectSubset<T, SyncQueueCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many SyncQueues and returns the data saved in the database.
+     * @param {SyncQueueCreateManyAndReturnArgs} args - Arguments to create many SyncQueues.
+     * @example
+     * // Create many SyncQueues
+     * const syncQueue = await prisma.syncQueue.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many SyncQueues and only return the `id`
+     * const syncQueueWithIdOnly = await prisma.syncQueue.createManyAndReturn({ 
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends SyncQueueCreateManyAndReturnArgs>(args?: SelectSubset<T, SyncQueueCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "createManyAndReturn">>
+
+    /**
+     * Delete a SyncQueue.
+     * @param {SyncQueueDeleteArgs} args - Arguments to delete one SyncQueue.
+     * @example
+     * // Delete one SyncQueue
+     * const SyncQueue = await prisma.syncQueue.delete({
+     *   where: {
+     *     // ... filter to delete one SyncQueue
+     *   }
+     * })
+     * 
+     */
+    delete<T extends SyncQueueDeleteArgs>(args: SelectSubset<T, SyncQueueDeleteArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "delete">, never, ExtArgs>
+
+    /**
+     * Update one SyncQueue.
+     * @param {SyncQueueUpdateArgs} args - Arguments to update one SyncQueue.
+     * @example
+     * // Update one SyncQueue
+     * const syncQueue = await prisma.syncQueue.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends SyncQueueUpdateArgs>(args: SelectSubset<T, SyncQueueUpdateArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "update">, never, ExtArgs>
+
+    /**
+     * Delete zero or more SyncQueues.
+     * @param {SyncQueueDeleteManyArgs} args - Arguments to filter SyncQueues to delete.
+     * @example
+     * // Delete a few SyncQueues
+     * const { count } = await prisma.syncQueue.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends SyncQueueDeleteManyArgs>(args?: SelectSubset<T, SyncQueueDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more SyncQueues.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SyncQueueUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many SyncQueues
+     * const syncQueue = await prisma.syncQueue.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends SyncQueueUpdateManyArgs>(args: SelectSubset<T, SyncQueueUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create or update one SyncQueue.
+     * @param {SyncQueueUpsertArgs} args - Arguments to update or create a SyncQueue.
+     * @example
+     * // Update or create a SyncQueue
+     * const syncQueue = await prisma.syncQueue.upsert({
+     *   create: {
+     *     // ... data to create a SyncQueue
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the SyncQueue we want to update
+     *   }
+     * })
+     */
+    upsert<T extends SyncQueueUpsertArgs>(args: SelectSubset<T, SyncQueueUpsertArgs<ExtArgs>>): Prisma__SyncQueueClient<$Result.GetResult<Prisma.$SyncQueuePayload<ExtArgs>, T, "upsert">, never, ExtArgs>
+
+
+    /**
+     * Count the number of SyncQueues.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SyncQueueCountArgs} args - Arguments to filter SyncQueues to count.
+     * @example
+     * // Count the number of SyncQueues
+     * const count = await prisma.syncQueue.count({
+     *   where: {
+     *     // ... the filter for the SyncQueues we want to count
+     *   }
+     * })
+    **/
+    count<T extends SyncQueueCountArgs>(
+      args?: Subset<T, SyncQueueCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], SyncQueueCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a SyncQueue.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SyncQueueAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends SyncQueueAggregateArgs>(args: Subset<T, SyncQueueAggregateArgs>): Prisma.PrismaPromise<GetSyncQueueAggregateType<T>>
+
+    /**
+     * Group by SyncQueue.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {SyncQueueGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends SyncQueueGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: SyncQueueGroupByArgs['orderBy'] }
+        : { orderBy?: SyncQueueGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, SyncQueueGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetSyncQueueGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the SyncQueue model
+   */
+  readonly fields: SyncQueueFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for SyncQueue.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__SyncQueueClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the SyncQueue model
+   */ 
+  interface SyncQueueFieldRefs {
+    readonly id: FieldRef<"SyncQueue", 'String'>
+    readonly action: FieldRef<"SyncQueue", 'String'>
+    readonly model: FieldRef<"SyncQueue", 'String'>
+    readonly data: FieldRef<"SyncQueue", 'String'>
+    readonly status: FieldRef<"SyncQueue", 'String'>
+    readonly retryCount: FieldRef<"SyncQueue", 'Int'>
+    readonly error: FieldRef<"SyncQueue", 'String'>
+    readonly createdAt: FieldRef<"SyncQueue", 'DateTime'>
+    readonly updatedAt: FieldRef<"SyncQueue", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * SyncQueue findUnique
+   */
+  export type SyncQueueFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * Filter, which SyncQueue to fetch.
+     */
+    where: SyncQueueWhereUniqueInput
+  }
+
+  /**
+   * SyncQueue findUniqueOrThrow
+   */
+  export type SyncQueueFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * Filter, which SyncQueue to fetch.
+     */
+    where: SyncQueueWhereUniqueInput
+  }
+
+  /**
+   * SyncQueue findFirst
+   */
+  export type SyncQueueFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * Filter, which SyncQueue to fetch.
+     */
+    where?: SyncQueueWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SyncQueues to fetch.
+     */
+    orderBy?: SyncQueueOrderByWithRelationInput | SyncQueueOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for SyncQueues.
+     */
+    cursor?: SyncQueueWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SyncQueues from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SyncQueues.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of SyncQueues.
+     */
+    distinct?: SyncQueueScalarFieldEnum | SyncQueueScalarFieldEnum[]
+  }
+
+  /**
+   * SyncQueue findFirstOrThrow
+   */
+  export type SyncQueueFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * Filter, which SyncQueue to fetch.
+     */
+    where?: SyncQueueWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SyncQueues to fetch.
+     */
+    orderBy?: SyncQueueOrderByWithRelationInput | SyncQueueOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for SyncQueues.
+     */
+    cursor?: SyncQueueWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SyncQueues from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SyncQueues.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of SyncQueues.
+     */
+    distinct?: SyncQueueScalarFieldEnum | SyncQueueScalarFieldEnum[]
+  }
+
+  /**
+   * SyncQueue findMany
+   */
+  export type SyncQueueFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * Filter, which SyncQueues to fetch.
+     */
+    where?: SyncQueueWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of SyncQueues to fetch.
+     */
+    orderBy?: SyncQueueOrderByWithRelationInput | SyncQueueOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing SyncQueues.
+     */
+    cursor?: SyncQueueWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` SyncQueues from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` SyncQueues.
+     */
+    skip?: number
+    distinct?: SyncQueueScalarFieldEnum | SyncQueueScalarFieldEnum[]
+  }
+
+  /**
+   * SyncQueue create
+   */
+  export type SyncQueueCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * The data needed to create a SyncQueue.
+     */
+    data: XOR<SyncQueueCreateInput, SyncQueueUncheckedCreateInput>
+  }
+
+  /**
+   * SyncQueue createMany
+   */
+  export type SyncQueueCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many SyncQueues.
+     */
+    data: SyncQueueCreateManyInput | SyncQueueCreateManyInput[]
+  }
+
+  /**
+   * SyncQueue createManyAndReturn
+   */
+  export type SyncQueueCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * The data used to create many SyncQueues.
+     */
+    data: SyncQueueCreateManyInput | SyncQueueCreateManyInput[]
+  }
+
+  /**
+   * SyncQueue update
+   */
+  export type SyncQueueUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * The data needed to update a SyncQueue.
+     */
+    data: XOR<SyncQueueUpdateInput, SyncQueueUncheckedUpdateInput>
+    /**
+     * Choose, which SyncQueue to update.
+     */
+    where: SyncQueueWhereUniqueInput
+  }
+
+  /**
+   * SyncQueue updateMany
+   */
+  export type SyncQueueUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update SyncQueues.
+     */
+    data: XOR<SyncQueueUpdateManyMutationInput, SyncQueueUncheckedUpdateManyInput>
+    /**
+     * Filter which SyncQueues to update
+     */
+    where?: SyncQueueWhereInput
+  }
+
+  /**
+   * SyncQueue upsert
+   */
+  export type SyncQueueUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * The filter to search for the SyncQueue to update in case it exists.
+     */
+    where: SyncQueueWhereUniqueInput
+    /**
+     * In case the SyncQueue found by the `where` argument doesn't exist, create a new SyncQueue with this data.
+     */
+    create: XOR<SyncQueueCreateInput, SyncQueueUncheckedCreateInput>
+    /**
+     * In case the SyncQueue was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<SyncQueueUpdateInput, SyncQueueUncheckedUpdateInput>
+  }
+
+  /**
+   * SyncQueue delete
+   */
+  export type SyncQueueDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+    /**
+     * Filter which SyncQueue to delete.
+     */
+    where: SyncQueueWhereUniqueInput
+  }
+
+  /**
+   * SyncQueue deleteMany
+   */
+  export type SyncQueueDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which SyncQueues to delete
+     */
+    where?: SyncQueueWhereInput
+  }
+
+  /**
+   * SyncQueue without action
+   */
+  export type SyncQueueDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the SyncQueue
+     */
+    select?: SyncQueueSelect<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -13430,6 +14474,21 @@ export namespace Prisma {
   };
 
   export type PrinterConfigScalarFieldEnum = (typeof PrinterConfigScalarFieldEnum)[keyof typeof PrinterConfigScalarFieldEnum]
+
+
+  export const SyncQueueScalarFieldEnum: {
+    id: 'id',
+    action: 'action',
+    model: 'model',
+    data: 'data',
+    status: 'status',
+    retryCount: 'retryCount',
+    error: 'error',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type SyncQueueScalarFieldEnum = (typeof SyncQueueScalarFieldEnum)[keyof typeof SyncQueueScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -14447,6 +15506,80 @@ export namespace Prisma {
     settings?: StringNullableWithAggregatesFilter<"PrinterConfig"> | string | null
     isActive?: BoolWithAggregatesFilter<"PrinterConfig"> | boolean
     updatedAt?: DateTimeWithAggregatesFilter<"PrinterConfig"> | Date | string
+  }
+
+  export type SyncQueueWhereInput = {
+    AND?: SyncQueueWhereInput | SyncQueueWhereInput[]
+    OR?: SyncQueueWhereInput[]
+    NOT?: SyncQueueWhereInput | SyncQueueWhereInput[]
+    id?: StringFilter<"SyncQueue"> | string
+    action?: StringFilter<"SyncQueue"> | string
+    model?: StringFilter<"SyncQueue"> | string
+    data?: StringFilter<"SyncQueue"> | string
+    status?: StringFilter<"SyncQueue"> | string
+    retryCount?: IntFilter<"SyncQueue"> | number
+    error?: StringNullableFilter<"SyncQueue"> | string | null
+    createdAt?: DateTimeFilter<"SyncQueue"> | Date | string
+    updatedAt?: DateTimeFilter<"SyncQueue"> | Date | string
+  }
+
+  export type SyncQueueOrderByWithRelationInput = {
+    id?: SortOrder
+    action?: SortOrder
+    model?: SortOrder
+    data?: SortOrder
+    status?: SortOrder
+    retryCount?: SortOrder
+    error?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type SyncQueueWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: SyncQueueWhereInput | SyncQueueWhereInput[]
+    OR?: SyncQueueWhereInput[]
+    NOT?: SyncQueueWhereInput | SyncQueueWhereInput[]
+    action?: StringFilter<"SyncQueue"> | string
+    model?: StringFilter<"SyncQueue"> | string
+    data?: StringFilter<"SyncQueue"> | string
+    status?: StringFilter<"SyncQueue"> | string
+    retryCount?: IntFilter<"SyncQueue"> | number
+    error?: StringNullableFilter<"SyncQueue"> | string | null
+    createdAt?: DateTimeFilter<"SyncQueue"> | Date | string
+    updatedAt?: DateTimeFilter<"SyncQueue"> | Date | string
+  }, "id">
+
+  export type SyncQueueOrderByWithAggregationInput = {
+    id?: SortOrder
+    action?: SortOrder
+    model?: SortOrder
+    data?: SortOrder
+    status?: SortOrder
+    retryCount?: SortOrder
+    error?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: SyncQueueCountOrderByAggregateInput
+    _avg?: SyncQueueAvgOrderByAggregateInput
+    _max?: SyncQueueMaxOrderByAggregateInput
+    _min?: SyncQueueMinOrderByAggregateInput
+    _sum?: SyncQueueSumOrderByAggregateInput
+  }
+
+  export type SyncQueueScalarWhereWithAggregatesInput = {
+    AND?: SyncQueueScalarWhereWithAggregatesInput | SyncQueueScalarWhereWithAggregatesInput[]
+    OR?: SyncQueueScalarWhereWithAggregatesInput[]
+    NOT?: SyncQueueScalarWhereWithAggregatesInput | SyncQueueScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"SyncQueue"> | string
+    action?: StringWithAggregatesFilter<"SyncQueue"> | string
+    model?: StringWithAggregatesFilter<"SyncQueue"> | string
+    data?: StringWithAggregatesFilter<"SyncQueue"> | string
+    status?: StringWithAggregatesFilter<"SyncQueue"> | string
+    retryCount?: IntWithAggregatesFilter<"SyncQueue"> | number
+    error?: StringNullableWithAggregatesFilter<"SyncQueue"> | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"SyncQueue"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"SyncQueue"> | Date | string
   }
 
   export type UserCreateInput = {
@@ -15548,6 +16681,90 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type SyncQueueCreateInput = {
+    id?: string
+    action?: string
+    model: string
+    data: string
+    status?: string
+    retryCount?: number
+    error?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type SyncQueueUncheckedCreateInput = {
+    id?: string
+    action?: string
+    model: string
+    data: string
+    status?: string
+    retryCount?: number
+    error?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type SyncQueueUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    status?: StringFieldUpdateOperationsInput | string
+    retryCount?: IntFieldUpdateOperationsInput | number
+    error?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SyncQueueUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    status?: StringFieldUpdateOperationsInput | string
+    retryCount?: IntFieldUpdateOperationsInput | number
+    error?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SyncQueueCreateManyInput = {
+    id?: string
+    action?: string
+    model: string
+    data: string
+    status?: string
+    retryCount?: number
+    error?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type SyncQueueUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    status?: StringFieldUpdateOperationsInput | string
+    retryCount?: IntFieldUpdateOperationsInput | number
+    error?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SyncQueueUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    model?: StringFieldUpdateOperationsInput | string
+    data?: StringFieldUpdateOperationsInput | string
+    status?: StringFieldUpdateOperationsInput | string
+    retryCount?: IntFieldUpdateOperationsInput | number
+    error?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type StringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>
     in?: string[]
@@ -16351,6 +17568,50 @@ export namespace Prisma {
 
   export type PrinterConfigSumOrderByAggregateInput = {
     width?: SortOrder
+  }
+
+  export type SyncQueueCountOrderByAggregateInput = {
+    id?: SortOrder
+    action?: SortOrder
+    model?: SortOrder
+    data?: SortOrder
+    status?: SortOrder
+    retryCount?: SortOrder
+    error?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type SyncQueueAvgOrderByAggregateInput = {
+    retryCount?: SortOrder
+  }
+
+  export type SyncQueueMaxOrderByAggregateInput = {
+    id?: SortOrder
+    action?: SortOrder
+    model?: SortOrder
+    data?: SortOrder
+    status?: SortOrder
+    retryCount?: SortOrder
+    error?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type SyncQueueMinOrderByAggregateInput = {
+    id?: SortOrder
+    action?: SortOrder
+    model?: SortOrder
+    data?: SortOrder
+    status?: SortOrder
+    retryCount?: SortOrder
+    error?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type SyncQueueSumOrderByAggregateInput = {
+    retryCount?: SortOrder
   }
 
   export type SaleCreateNestedManyWithoutUserInput = {
@@ -18568,6 +19829,10 @@ export namespace Prisma {
      * @deprecated Use PrinterConfigDefaultArgs instead
      */
     export type PrinterConfigArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = PrinterConfigDefaultArgs<ExtArgs>
+    /**
+     * @deprecated Use SyncQueueDefaultArgs instead
+     */
+    export type SyncQueueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = SyncQueueDefaultArgs<ExtArgs>
 
   /**
    * Batch Payload for updateMany & deleteMany & createMany

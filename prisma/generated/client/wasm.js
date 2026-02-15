@@ -273,6 +273,18 @@ exports.Prisma.PrinterConfigScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.SyncQueueScalarFieldEnum = {
+  id: 'id',
+  action: 'action',
+  model: 'model',
+  data: 'data',
+  status: 'status',
+  retryCount: 'retryCount',
+  error: 'error',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -295,7 +307,8 @@ exports.Prisma.ModelName = {
   AuditLog: 'AuditLog',
   InventoryMovement: 'InventoryMovement',
   Setting: 'Setting',
-  PrinterConfig: 'PrinterConfig'
+  PrinterConfig: 'PrinterConfig',
+  SyncQueue: 'SyncQueue'
 };
 
 /**

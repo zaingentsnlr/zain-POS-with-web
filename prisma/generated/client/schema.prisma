@@ -202,3 +202,16 @@ model PrinterConfig {
   isActive    Boolean  @default(true)
   updatedAt   DateTime @updatedAt
 }
+
+// Queue for offline synchronization
+model SyncQueue {
+  id         String   @id @default(uuid())
+  action     String   @default("CREATE") // CREATE, UPDATE
+  model      String // Sale, Product, etc.
+  data       String // JSON payload
+  status     String   @default("PENDING") // PENDING, FAILED
+  retryCount Int      @default(0)
+  error      String? // Last error message
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
