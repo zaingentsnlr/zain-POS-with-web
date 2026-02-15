@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bell, Check, ExternalLink, X } from 'lucide-react';
-import { useNotifications, Notification } from '@/contexts/NotificationContext';
+import { Bell, Check, ExternalLink } from 'lucide-react';
+import { useNotifications } from '@/contexts/NotificationContext';
+import type { Notification } from '@/contexts/NotificationContext';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 
 export function NotificationBell() {
     const { notifications, unreadCount, markAsRead, markAllAsRead, subscribePush, isPushEnabled } = useNotifications();
+
+
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -138,7 +141,7 @@ export function NotificationBell() {
 
 // Mobile Notification Page Link/Icon (simpler version for mobile header if needed)
 export function MobileNotificationBell() {
-    const { unreadCount } = useNotifications();
+    // const { unreadCount } = useNotifications();
 
     // On mobile, maybe we just navigate to a page or open a drawer?
     // User requested "Red dot on bell icon".
