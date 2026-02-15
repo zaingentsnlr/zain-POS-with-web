@@ -2,7 +2,7 @@ import { format } from 'date-fns';
 import { User, FileText, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Eye } from 'lucide-react';
-import { Invoice } from '@/features/invoices/services/invoice.service';
+import type { Invoice } from '@/features/invoices/services/invoice.service';
 
 interface MobileInvoiceCardProps {
     invoice: Invoice;
