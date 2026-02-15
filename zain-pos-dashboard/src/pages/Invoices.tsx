@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Eye, Download } from 'lucide-react';
+import { Search, Eye, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MobileInvoiceCard } from '@/components/shared/MobileInvoiceCard';
 import { invoiceService, type Invoice, type InvoiceParams } from '@/features/invoices/services/invoice.service';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
 import { Button } from '@/components/ui/button';
@@ -174,26 +175,67 @@ export default function Invoices() {
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none"
                     />
                 </div>
-
-                {/* 
-                   Date Filters are now handled globally in the Header.
-                   We show a message or just leave empty space/other filters here.
-                */}
             </div>
 
-            {/* Paginated Table */}
-            <PaginatedTable
-                data={invoices}
-                columns={columns}
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-                loading={loading}
-                itemsPerPage={limit}
-                onLimitChange={setLimit}
-                totalItems={totalItems}
-                emptyMessage="No invoices found matching your criteria."
-            />
+            {/* Desktop Table View */}
+            <div className="hidden md:block">
+                <PaginatedTable
+                    data={invoices}
+                    columns={columns}
+                    page={page}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                    loading={loading}
+                    itemsPerPage={limit}
+                    onLimitChange={setLimit}
+                    totalItems={totalItems}
+                    emptyMessage="No invoices found matching your criteria."
+                />
+            </div>
+
+            {/* Mobile Grid View */}
+            <div className="md:hidden space-y-4">
+                {loading ? (
+                    <div className="text-center py-8 text-gray-500">Loading invoices...</div>
+                ) : invoices.length > 0 ? (
+                    invoices.map((invoice) => (
+                        <MobileInvoiceCard
+                            key={invoice.id}
+                            invoice={invoice}
+                            onView={(inv) => setSelectedInvoice(inv)}
+                        />
+                    ))
+                ) : (
+                    <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl border border-gray-100 dark:bg-gray-900/50 dark:border-gray-800">
+                        No invoices found.
+                    </div>
+                )}
+
+                {/* Mobile Pagination */}
+                {totalItems > 0 && (
+                    <div className="flex items-center justify-between pt-4">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={page <= 1 || loading}
+                            onClick={() => setPage(page - 1)}
+                        >
+                            <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                        </Button>
+                        <span className="text-sm text-gray-500">
+                            Page {page} of {totalPages}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={page >= totalPages || loading}
+                            onClick={() => setPage(page + 1)}
+                        >
+                            Next <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                    </div>
+                )}
+            </div>
 
             {/* Invoice Detail Modal */}
             {selectedInvoice && (

@@ -19,9 +19,9 @@ const DateFilterContext = createContext<DateFilterContextType | undefined>(undef
 
 export function DateFilterProvider({ children }: { children: ReactNode }) {
     const [dateRange, setDateRangeState] = useState<DateRange>({
-        startDate: startOfDay(new Date()),
+        startDate: startOfMonth(new Date()),
         endDate: endOfDay(new Date()),
-        label: 'Today'
+        label: 'This Month'
     });
 
     const setDateRange = (range: DateRange) => {

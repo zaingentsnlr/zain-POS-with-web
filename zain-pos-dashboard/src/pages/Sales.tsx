@@ -4,6 +4,9 @@ import { PaginatedTable } from '@/components/shared/PaginatedTable';
 import { TrendingUp, ShoppingCart } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '@/lib/api';
+import { MobileSalesCard } from '@/components/shared/MobileSalesCard';
+import { Button } from '@/components/ui/button';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function Sales() {
     const { dateRange } = useDateFilter();
@@ -151,8 +154,13 @@ export default function Sales() {
                 </div>
             </div>
 
-            {/* Sales Table */}
-            <div>
+
+
+
+            {/* ... Headers & Stats ... */}
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block">
                 <PaginatedTable
                     data={sales}
                     columns={columns}
@@ -165,6 +173,46 @@ export default function Sales() {
                     onLimitChange={setLimit}
                     emptyMessage="No sales found for the selected period."
                 />
+            </div>
+
+            {/* Mobile Grid View */}
+            <div className="md:hidden space-y-4">
+                {loading ? (
+                    <div className="text-center py-8 text-gray-500">Loading sales...</div>
+                ) : sales.length > 0 ? (
+                    sales.map((sale) => (
+                        <MobileSalesCard key={sale.id} sale={sale} />
+                    ))
+                ) : (
+                    <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl border border-gray-100 dark:bg-gray-900/50 dark:border-gray-800">
+                        No sales found for this period.
+                    </div>
+                )}
+
+                {/* Mobile Pagination */}
+                {totalItems > 0 && (
+                    <div className="flex items-center justify-between pt-4">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={page <= 1 || loading}
+                            onClick={() => setPage(page - 1)}
+                        >
+                            <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                        </Button>
+                        <span className="text-sm text-gray-500">
+                            Page {page} of {Math.ceil(totalItems / limit)}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={page >= Math.ceil(totalItems / limit) || loading}
+                            onClick={() => setPage(page + 1)}
+                        >
+                            Next <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                    </div>
+                )}
             </div>
         </div>
     );
