@@ -1,13 +1,5 @@
 import { Package, AlertTriangle, CheckCircle } from 'lucide-react';
-
-interface Product {
-    id: string;
-    name: string;
-    stock: number;
-    price: number;
-    category: { name: string };
-    minStock: number;
-}
+import type { Product } from '@/features/inventory/services/inventory.service';
 
 interface MobileInventoryCardProps {
     product: Product;
@@ -23,7 +15,7 @@ export function MobileInventoryCard({ product }: MobileInventoryCardProps) {
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                         {product.name}
                     </h3>
-                    <p className="text-xs text-gray-500">{product.category.name}</p>
+                    <p className="text-xs text-gray-500">{product.category?.name || 'Uncategorized'}</p>
                 </div>
                 <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${isLowStock ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                     }`}>
