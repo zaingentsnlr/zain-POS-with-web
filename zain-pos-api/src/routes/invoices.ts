@@ -10,12 +10,35 @@ router.use(authMiddleware);
 // Get recent sales (invoices)
 router.get('/', async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit as string) || 500;
+        const limit = parseInt(req.query.limit as string) || 20; // Default lower limit for better performance
         const page = parseInt(req.query.page as string) || 1;
+        const search = req.query.search as string;
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
         const skip = (page - 1) * limit;
+
+        const where: any = {};
+
+        // Search filter
+        if (search) {
+            const isBillNo = !isNaN(Number(search));
+            where.OR = [
+                { customerName: { contains: search, mode: 'insensitive' } },
+                { customerPhone: { contains: search } },
+                ...(isBillNo ? [{ billNo: Number(search) }] : [])
+            ];
+        }
+
+        // Date range filter
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate) where.createdAt.gte = new Date(startDate);
+            if (endDate) where.createdAt.lte = new Date(endDate);
+        }
 
         const [sales, total] = await Promise.all([
             prisma.sale.findMany({
+                where,
                 include: {
                     items: true
                 },
@@ -23,7 +46,7 @@ router.get('/', async (req, res) => {
                 take: limit,
                 skip
             }),
-            prisma.sale.count()
+            prisma.sale.count({ where })
         ]);
 
         // Map to a format expected by the frontend
