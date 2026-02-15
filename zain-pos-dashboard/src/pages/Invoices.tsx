@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Eye, Download, Calendar } from 'lucide-react';
+import { Search, Eye, Download } from 'lucide-react';
 import { invoiceService, type Invoice, type InvoiceParams } from '@/features/invoices/services/invoice.service';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
 import { Button } from '@/components/ui/button';

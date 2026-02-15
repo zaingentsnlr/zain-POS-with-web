@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useDateFilter, DateRangeLabel } from '@/contexts/DateFilterContext';
+import { useState } from 'react';
+import { useDateFilter, type DateRangeLabel } from '@/contexts/DateFilterContext';
 import { Calendar, ChevronDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';

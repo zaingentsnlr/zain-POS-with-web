@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDateFilter } from '@/contexts/DateFilterContext';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
-import { TrendingUp, Calendar, ShoppingCart } from 'lucide-react';
+import { TrendingUp, ShoppingCart } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '@/lib/api';
 

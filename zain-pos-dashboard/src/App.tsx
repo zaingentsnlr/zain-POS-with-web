@@ -98,23 +98,8 @@ function AppRoutes() {
   );
 }
 
-function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <DateFilterProvider>
-          <AppRoutes />
-        </DateFilterProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  );
-}
-
-export default App;
-
-
 import { Toaster, toast } from 'react-hot-toast';
-import { socket } from './lib/socket';
+import { socket } from '@/lib/socket';
 import { useEffect } from 'react';
 
 // Global Socket Listener Component
@@ -143,9 +128,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Toaster />
-        <SocketListener />
-        <AppRoutes />
+        <DateFilterProvider>
+          <Toaster />
+          <SocketListener />
+          <AppRoutes />
+        </DateFilterProvider>
       </AuthProvider>
     </BrowserRouter>
   );
