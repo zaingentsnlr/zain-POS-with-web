@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { FileText, Search, Eye, Filter, Download, Calendar } from 'lucide-react';
-import { invoiceService, Invoice, InvoiceParams } from '@/features/invoices/services/invoice.service';
+import { Search, Eye, Download, Calendar } from 'lucide-react';
+import { invoiceService, type Invoice, type InvoiceParams } from '@/features/invoices/services/invoice.service';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
 import { Button } from '@/components/ui/button';
 // import { DateRangePicker } from '@/components/ui/date-range-picker'; // Future enhancement
@@ -9,7 +9,6 @@ export default function Invoices() {
     // State
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({ total: 0, totalValue: 0, avgValue: 0 }); // Note: API needs to return these or we calculate from page (imperfect) or separate endpoint
 
     // Pagination & Filters
     const [page, setPage] = useState(1);
