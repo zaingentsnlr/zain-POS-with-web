@@ -26,7 +26,7 @@ export default function Dashboard() {
 
     // Safe accessors with defaults
     const summary = stats?.summary || { totalSales: 0, totalOrders: 0, averageOrderValue: 0 };
-    const hourlySales = stats?.hourlySales || [];
+    const salesTrend = stats?.salesTrend || [];
     const topProducts = stats?.topProducts || [];
     const paymentAudit = stats?.paymentAudit || { CASH: [], UPI: [], CARD: [] };
     const lowStockCount = stats?.lowStock?.length || 0;
@@ -43,47 +43,47 @@ export default function Dashboard() {
             <AlertBanner alerts={alerts} />
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                    title="Today's Sales"
+                    title="Total Sales"
                     value={`₹${summary.totalSales.toLocaleString()}`}
                     icon={<DollarSign className="w-6 h-6" />}
                     loading={loading}
-                    className="border-l-4 border-l-green-500"
+                    className="border-l-4 border-l-green-500 shadow-sm"
                 />
                 <StatCard
                     title="Orders"
                     value={summary.totalOrders}
                     icon={<ShoppingCart className="w-6 h-6" />}
                     loading={loading}
-                    className="border-l-4 border-l-blue-500"
+                    className="border-l-4 border-l-blue-500 shadow-sm"
                 />
                 <StatCard
                     title="Avg Order Value"
                     value={`₹${summary.averageOrderValue.toFixed(0)}`}
                     icon={<TrendingUp className="w-6 h-6" />}
                     loading={loading}
-                    className="border-l-4 border-l-purple-500"
+                    className="border-l-4 border-l-purple-500 shadow-sm"
                 />
                 <StatCard
                     title="Low Stock"
                     value={lowStockCount}
                     icon={<AlertTriangle className="w-6 h-6" />}
                     loading={loading}
-                    className="border-l-4 border-l-orange-500"
+                    className="border-l-4 border-l-orange-500 shadow-sm"
                 />
             </div>
 
             {/* Charts & Top Products */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <ChartWidget title="Hourly Sales" loading={loading}>
-                    <LineChart data={hourlySales}>
+                <ChartWidget title="Sales Trend" loading={loading}>
+                    <LineChart data={salesTrend}>
                         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                         <XAxis
-                            dataKey="hour"
-                            tickFormatter={(hour) => `${hour}:00`}
+                            dataKey="label"
                             stroke="#888888"
                             fontSize={12}
+                            tick={{ fontSize: 10 }}
                         />
                         <YAxis
                             stroke="#888888"
@@ -92,7 +92,7 @@ export default function Dashboard() {
                         />
                         <Tooltip
                             formatter={(value: number) => [`₹${value}`, 'Sales']}
-                            labelFormatter={(hour) => `${hour}:00`}
+                            labelStyle={{ color: '#374151' }}
                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                         />
                         <Line

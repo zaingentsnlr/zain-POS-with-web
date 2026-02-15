@@ -7,15 +7,75 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
-// Get today's sales summary
+// Get paginated sales list
+router.get('/', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const skip = (page - 1) * limit;
+
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : null;
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : null;
+
+        // Build filter
+        const where: any = {
+            status: 'COMPLETED'
+        };
+
+        if (startDate && endDate) {
+            where.createdAt = {
+                gte: startDate,
+                lte: endDate
+            };
+        }
+
+        const [sales, total] = await Promise.all([
+            prisma.sale.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { createdAt: 'desc' },
+                include: {
+                    user: {
+                        select: { name: true }
+                    },
+                    items: true
+                }
+            }),
+            prisma.sale.count({ where })
+        ]);
+
+        res.json({
+            data: sales,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
+    } catch (error) {
+        console.error('Failed to fetch sales list:', error);
+        res.status(500).json({ error: 'Failed to fetch sales list' });
+    }
+});
+
+// Get sales summary (flexible date range)
 router.get('/summary', async (req, res) => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date();
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+
+        // If no time specified, set to start/end of day
+        if (!req.query.startDate) startDate.setHours(0, 0, 0, 0);
+        if (!req.query.endDate) endDate.setHours(23, 59, 59, 999);
 
         const sales = await prisma.sale.findMany({
             where: {
-                createdAt: { gte: today },
+                createdAt: {
+                    gte: startDate,
+                    lte: endDate
+                },
                 status: 'COMPLETED'
             }
         });
@@ -27,7 +87,7 @@ router.get('/summary', async (req, res) => {
             totalSales,
             totalOrders,
             averageOrderValue: totalOrders > 0 ? totalSales / totalOrders : 0,
-            date: today.toISOString()
+            range: { start: startDate, end: endDate }
         });
     } catch (error) {
         console.error('Sales summary error:', error);
@@ -35,15 +95,19 @@ router.get('/summary', async (req, res) => {
     }
 });
 
-// Get daily sales for last 30 days
+// Get daily sales trend
 router.get('/daily', async (req, res) => {
     try {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        // Default to last 30 days if not provided
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : new Date();
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : new Date(new Date().setDate(endDate.getDate() - 30));
 
         const sales = await prisma.sale.findMany({
             where: {
-                createdAt: { gte: thirtyDaysAgo },
+                createdAt: {
+                    gte: startDate,
+                    lte: endDate
+                },
                 status: 'COMPLETED'
             },
             orderBy: { createdAt: 'asc' }
@@ -60,6 +124,7 @@ router.get('/daily', async (req, res) => {
             dailySales[date].orders += 1;
         });
 
+        // Fill gaps if needed (optional, keeping simple for now)
         res.json(Object.values(dailySales));
     } catch (error) {
         console.error('Daily sales error:', error);
@@ -67,15 +132,19 @@ router.get('/daily', async (req, res) => {
     }
 });
 
-// Get hourly sales for today
+// Get hourly sales (single day)
 router.get('/hourly', async (req, res) => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const date = req.query.date ? new Date(req.query.date as string) : new Date();
+        const startOfDay = new Date(date); startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date); endOfDay.setHours(23, 59, 59, 999);
 
         const sales = await prisma.sale.findMany({
             where: {
-                createdAt: { gte: today },
+                createdAt: {
+                    gte: startOfDay,
+                    lte: endOfDay
+                },
                 status: 'COMPLETED'
             }
         });

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { DateFilterProvider } from './contexts/DateFilterContext';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -96,6 +97,20 @@ function AppRoutes() {
     </Routes>
   );
 }
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <DateFilterProvider>
+          <AppRoutes />
+        </DateFilterProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+export default App;
 
 
 import { Toaster, toast } from 'react-hot-toast';

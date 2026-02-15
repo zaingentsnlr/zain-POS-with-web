@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Bell, Sun, Moon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 
 interface HeaderProps {
     title: string;
@@ -18,6 +19,8 @@ export function Header({ title, darkMode, setDarkMode }: HeaderProps) {
                 {title}
             </h2>
             <div className="flex items-center gap-4">
+                <DateRangePicker />
+
                 <Link to="/activity">
                     <Button variant="ghost" size="icon" className="relative text-gray-500 hover:text-primary-600">
                         <Bell className="w-5 h-5" />

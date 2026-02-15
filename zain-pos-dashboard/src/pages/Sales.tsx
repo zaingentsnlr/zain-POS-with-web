@@ -1,26 +1,38 @@
 import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Calendar } from 'lucide-react';
-import api from '../lib/api';
-
-interface DailySales {
-    date: string;
-    sales: number;
-    orders: number;
-}
+import { useDateFilter } from '@/contexts/DateFilterContext';
+import { PaginatedTable } from '@/components/shared/PaginatedTable';
+import { TrendingUp, Calendar, ShoppingCart } from 'lucide-react';
+import { format } from 'date-fns';
+import api from '@/lib/api';
 
 export default function Sales() {
-    const [dailySales, setDailySales] = useState<DailySales[]>([]);
+    const { dateRange } = useDateFilter();
+    const [sales, setSales] = useState<any[]>([]);
+    const [summary, setSummary] = useState({ totalSales: 0, totalOrders: 0, averageOrderValue: 0 });
+
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(50);
+    const [totalItems, setTotalItems] = useState(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         fetchSales();
-    }, []);
+        fetchSummary();
+    }, [dateRange, page, limit]);
 
     const fetchSales = async () => {
+        setLoading(true);
         try {
-            const response = await api.get('/sales/daily');
-            setDailySales(response.data);
+            const params = {
+                page,
+                limit,
+                startDate: dateRange.startDate?.toISOString(),
+                endDate: dateRange.endDate?.toISOString()
+            };
+            const response = await api.get('/sales', { params });
+            setSales(response.data.data);
+            setTotalItems(response.data.pagination.total);
         } catch (error) {
             console.error('Failed to fetch sales:', error);
         } finally {
@@ -28,124 +40,131 @@ export default function Sales() {
         }
     };
 
-    const totalSales = dailySales.reduce((sum, day) => sum + day.sales, 0);
-    const totalOrders = dailySales.reduce((sum, day) => sum + day.orders, 0);
+    const fetchSummary = async () => {
+        try {
+            const params = {
+                startDate: dateRange.startDate?.toISOString(),
+                endDate: dateRange.endDate?.toISOString()
+            };
+            const response = await api.get('/sales/summary', { params });
+            setSummary(response.data);
+        } catch (error) {
+            console.error('Failed to fetch summary:', error);
+        }
+    };
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-            </div>
-        );
-    }
+    const columns = [
+        {
+            header: 'Bill No',
+            accessor: 'billNo' as keyof any,
+            className: 'font-medium'
+        },
+        {
+            header: 'Date',
+            render: (sale: any) => format(new Date(sale.createdAt), 'dd MMM yyyy, hh:mm a')
+        },
+        {
+            header: 'Customer',
+            render: (sale: any) => (
+                <div>
+                    <div className="font-medium text-gray-900">{sale.customerName || 'Walk-in'}</div>
+                    {sale.customerPhone && <div className="text-xs text-gray-500">{sale.customerPhone}</div>}
+                </div>
+            )
+        },
+        {
+            header: 'Items',
+            render: (sale: any) => sale.items?.length || 0,
+            className: 'text-right'
+        },
+        {
+            header: 'Amount',
+            render: (sale: any) => `₹${sale.grandTotal.toLocaleString()}`,
+            className: 'text-right font-medium'
+        },
+        {
+            header: 'Status',
+            render: (sale: any) => (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${sale.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                    {sale.status}
+                </span>
+            ),
+            className: 'text-center'
+        },
+        {
+            header: 'Cashier',
+            accessor: 'user.name' as keyof any,
+            render: (sale: any) => sale.user?.name || '-'
+        }
+    ];
 
     return (
-        <div className="space-y-6 pb-20 lg:pb-6">
+        <div className="space-y-6">
             <div>
-                <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Sales</h1>
-                <p className="text-gray-600 mt-1">Track your sales performance over time</p>
+                <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100">Sales History</h1>
+                <p className="text-gray-600 dark:text-gray-400 mt-1">
+                    View matching sales for {dateRange.label}
+                </p>
             </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="card">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-green-50 rounded-lg">
-                            <TrendingUp className="text-green-600" size={24} />
+                <div className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                            <TrendingUp className="text-green-600 dark:text-green-400 w-6 h-6" />
                         </div>
                         <div>
-                            <p className="text-sm text-gray-600">Total Revenue (30 days)</p>
-                            <p className="text-2xl font-bold text-gray-900">₹{totalSales.toLocaleString()}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                ₹{summary.totalSales.toLocaleString()}
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                <div className="card">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-blue-50 rounded-lg">
-                            <Calendar className="text-blue-600" size={24} />
+                <div className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                            <ShoppingCart className="text-blue-600 dark:text-blue-400 w-6 h-6" />
                         </div>
                         <div>
-                            <p className="text-sm text-gray-600">Total Orders</p>
-                            <p className="text-2xl font-bold text-gray-900">{totalOrders}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Total Orders</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.totalOrders}</p>
                         </div>
                     </div>
                 </div>
 
-                <div className="card">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-purple-50 rounded-lg">
-                            <TrendingUp className="text-purple-600" size={24} />
+                <div className="p-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                            <TrendingUp className="text-purple-600 dark:text-purple-400 w-6 h-6" />
                         </div>
                         <div>
-                            <p className="text-sm text-gray-600">Average Order</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                                ₹{totalOrders > 0 ? (totalSales / totalOrders).toFixed(0) : 0}
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Average Order</p>
+                            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                ₹{summary.averageOrderValue.toFixed(0)}
                             </p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Sales Chart */}
-            <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Sales Trend (Last 30 Days)</h2>
-                <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={dailySales}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis
-                            dataKey="date"
-                            tickFormatter={(date) => new Date(date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
-                        />
-                        <YAxis />
-                        <Tooltip
-                            formatter={(value: number) => [`₹${value}`, 'Sales']}
-                            labelFormatter={(date) => new Date(date).toLocaleDateString('en-IN')}
-                        />
-                        <Line
-                            type="monotone"
-                            dataKey="sales"
-                            stroke="#10b981"
-                            strokeWidth={3}
-                            dot={{ fill: '#10b981', r: 4 }}
-                        />
-                    </LineChart>
-                </ResponsiveContainer>
-            </div>
-
             {/* Sales Table */}
-            <div className="card overflow-x-auto">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Daily Breakdown</h2>
-                <table className="w-full">
-                    <thead>
-                        <tr className="border-b border-gray-200">
-                            <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Date</th>
-                            <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Orders</th>
-                            <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Sales</th>
-                            <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Avg</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {dailySales.slice().reverse().map((day) => (
-                            <tr key={day.date} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="py-3 px-4 text-sm text-gray-900">
-                                    {new Date(day.date).toLocaleDateString('en-IN', {
-                                        weekday: 'short',
-                                        month: 'short',
-                                        day: 'numeric'
-                                    })}
-                                </td>
-                                <td className="py-3 px-4 text-sm text-gray-900 text-right">{day.orders}</td>
-                                <td className="py-3 px-4 text-sm font-medium text-gray-900 text-right">
-                                    ₹{day.sales.toLocaleString()}
-                                </td>
-                                <td className="py-3 px-4 text-sm text-gray-600 text-right">
-                                    ₹{day.orders > 0 ? (day.sales / day.orders).toFixed(0) : 0}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            <div>
+                <PaginatedTable
+                    data={sales}
+                    columns={columns}
+                    page={page}
+                    totalPages={Math.ceil(totalItems / limit)}
+                    onPageChange={setPage}
+                    loading={loading}
+                    itemsPerPage={limit}
+                    totalItems={totalItems}
+                    onLimitChange={setLimit}
+                    emptyMessage="No sales found for the selected period."
+                />
             </div>
         </div>
     );

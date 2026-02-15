@@ -25,6 +25,7 @@
         "dotenv": "^16.4.7",
         "express": "^4.21.2",
         "helmet": "^8.0.0",
+        "json2csv": "^6.0.0-alpha.2",
         "jsonwebtoken": "^9.0.2",
         "socket.io": "^4.8.3",
         "web-push": "^3.6.7"
@@ -33,6 +34,7 @@
         "@types/bcryptjs": "^2.4.6",
         "@types/cors": "^2.8.17",
         "@types/express": "^5.0.0",
+        "@types/json2csv": "^5.0.7",
         "@types/jsonwebtoken": "^9.0.7",
         "@types/node": "^22.10.5",
         "@types/web-push": "^3.6.4",

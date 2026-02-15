@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { Parser } from 'json2csv';
 import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
@@ -79,6 +80,73 @@ router.get('/', async (req, res) => {
     } catch (error) {
         console.error('Invoices error:', error);
         res.status(500).json({ error: 'Failed to fetch invoices' });
+    }
+});
+
+// Export Invoices (CSV)
+router.get('/export', async (req, res) => {
+    try {
+        const search = req.query.search as string;
+        const startDate = req.query.startDate as string;
+        const endDate = req.query.endDate as string;
+        const paymentMethod = req.query.paymentMethod as string;
+
+        const where: any = {};
+
+        if (search) {
+            const isBillNo = !isNaN(Number(search));
+            where.OR = [
+                { customerName: { contains: search, mode: 'insensitive' } },
+                { customerPhone: { contains: search } },
+                ...(isBillNo ? [{ billNo: Number(search) }] : [])
+            ];
+        }
+
+        if (startDate || endDate) {
+            where.createdAt = {};
+            if (startDate) where.createdAt.gte = new Date(startDate);
+            if (endDate) where.createdAt.lte = new Date(endDate);
+        }
+
+        if (paymentMethod && paymentMethod !== 'ALL') {
+            where.paymentMethod = paymentMethod;
+        }
+
+        const sales = await prisma.sale.findMany({
+            where,
+            include: {
+                items: true,
+                user: { select: { name: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const invoices = sales.map((s: any) => ({
+            'Bill No': s.billNo,
+            'Customer Name': s.customerName || 'Walk-in',
+            'Phone': s.customerPhone || 'N/A',
+            'Date': s.createdAt.toISOString().split('T')[0],
+            'Time': s.createdAt.toLocaleTimeString(),
+            'Subtotal': s.subtotal,
+            'Discount': s.discount,
+            'Tax': s.taxAmount,
+            'Grand Total': s.grandTotal,
+            'Payment Method': s.paymentMethod,
+            'Status': s.status,
+            'Cashier': s.user?.name || 'Unknown',
+            'Items': s.items.map((i: any) => `${i.quantity}x ${i.productName}`).join(', ')
+        }));
+
+        const json2csvParser = new Parser();
+        const csv = json2csvParser.parse(invoices);
+
+        res.header('Content-Type', 'text/csv');
+        res.attachment(`invoices-${new Date().toISOString().split('T')[0]}.csv`);
+        res.send(csv);
+
+    } catch (error) {
+        console.error('Export error:', error);
+        res.status(500).json({ error: 'Failed to export invoices' });
     }
 });
 

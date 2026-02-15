@@ -3,12 +3,17 @@ import { Search, Eye, Download, Calendar } from 'lucide-react';
 import { invoiceService, type Invoice, type InvoiceParams } from '@/features/invoices/services/invoice.service';
 import { PaginatedTable } from '@/components/shared/PaginatedTable';
 import { Button } from '@/components/ui/button';
-// import { DateRangePicker } from '@/components/ui/date-range-picker'; // Future enhancement
+import { useDateFilter } from '@/contexts/DateFilterContext';
+import api from '@/lib/api';
+import { toast } from 'react-hot-toast';
 
 export default function Invoices() {
     // State
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Global Date Filter
+    const { dateRange } = useDateFilter();
 
     // Pagination & Filters
     const [page, setPage] = useState(1);
@@ -17,10 +22,9 @@ export default function Invoices() {
     const [totalItems, setTotalItems] = useState(0);
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
 
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+    const [exporting, setExporting] = useState(false);
 
     // Debounce Search
     useEffect(() => {
@@ -36,8 +40,8 @@ export default function Invoices() {
                 page,
                 limit,
                 search: debouncedSearch,
-                startDate: startDate || undefined,
-                endDate: endDate || undefined
+                startDate: dateRange.startDate?.toISOString(),
+                endDate: dateRange.endDate?.toISOString()
             };
 
             const data = await invoiceService.getInvoices(params);
@@ -45,15 +49,13 @@ export default function Invoices() {
             setInvoices(data.invoices);
             setTotalPages(data.pagination.pages);
             setTotalItems(data.pagination.total);
-
-            // Note: For accurate stats across ALL pages, we'd need a separate API endpoint
-            // For now, we can show stats for the current view or fetch a summary
         } catch (error) {
             console.error('Failed to load invoices', error);
+            toast.error('Failed to load invoices');
         } finally {
             setLoading(false);
         }
-    }, [page, limit, debouncedSearch, startDate, endDate]);
+    }, [page, limit, debouncedSearch, dateRange]);
 
     useEffect(() => {
         fetchInvoices();
@@ -62,7 +64,42 @@ export default function Invoices() {
     // Reset page when filters change
     useEffect(() => {
         setPage(1);
-    }, [debouncedSearch, startDate, endDate, limit]);
+    }, [debouncedSearch, dateRange, limit]);
+
+    // Handle Export
+    const handleExport = async () => {
+        setExporting(true);
+        const toastId = toast.loading('Exporting invoices...');
+        try {
+            const params = {
+                search: debouncedSearch,
+                startDate: dateRange.startDate?.toISOString(),
+                endDate: dateRange.endDate?.toISOString()
+            };
+
+            // Trigger download
+            const response = await api.get('/invoices/export', {
+                params,
+                responseType: 'blob'
+            });
+
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `invoices_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            toast.success('Export completed!', { id: toastId });
+        } catch (error) {
+            console.error('Export failed:', error);
+            toast.error('Export failed', { id: toastId });
+        } finally {
+            setExporting(false);
+        }
+    };
 
     // Columns Definition
     const columns = [
@@ -87,7 +124,6 @@ export default function Invoices() {
         },
         {
             header: 'Items',
-            accessor: 'items' as keyof Invoice, // identifying for types, but render overrides
             render: (inv: Invoice) => <span className="text-gray-600 dark:text-gray-400">{inv.items.length} items</span>,
             className: "text-center"
         },
@@ -114,11 +150,14 @@ export default function Invoices() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100">Invoices</h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">Manage and view customer billing history</p>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                        View transactions for {dateRange.label}
+                    </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline">
-                        <Download className="w-4 h-4 mr-2" /> Export
+                    <Button variant="outline" onClick={handleExport} disabled={exporting}>
+                        <Download className="w-4 h-4 mr-2" />
+                        {exporting ? 'Exporting...' : 'Export CSV'}
                     </Button>
                 </div>
             </div>
@@ -136,25 +175,10 @@ export default function Invoices() {
                     />
                 </div>
 
-                <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
-                    {/* Basic Date Inputs for now */}
-                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <Calendar size={16} className="ml-2 text-gray-500" />
-                        <input
-                            type="date"
-                            className="bg-transparent border-none text-sm p-1 focus:ring-0"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                        />
-                        <span className="text-gray-400">-</span>
-                        <input
-                            type="date"
-                            className="bg-transparent border-none text-sm p-1 focus:ring-0"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                        />
-                    </div>
-                </div>
+                {/* 
+                   Date Filters are now handled globally in the Header.
+                   We show a message or just leave empty space/other filters here.
+                */}
             </div>
 
             {/* Paginated Table */}
@@ -171,7 +195,7 @@ export default function Invoices() {
                 emptyMessage="No invoices found matching your criteria."
             />
 
-            {/* Invoice Detail Modal (Kept largely the same, just styling updates) */}
+            {/* Invoice Detail Modal */}
             {selectedInvoice && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-800">
@@ -200,27 +224,40 @@ export default function Invoices() {
                                         </p>
                                     </div>
                                 </div>
-
-                                <div>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Items Purchased</p>
-                                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg overflow-hidden">
-                                        {selectedInvoice.items.map((item, index) => (
-                                            <div key={index} className="flex justify-between p-3 border-b last:border-0 border-gray-100 dark:border-gray-700">
-                                                <span className="font-medium">{item.product.name}</span>
-                                                <span className="text-gray-500">x{item.quantity}</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                                <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="text-left text-sm text-gray-500 dark:text-gray-400">
+                                                <th className="pb-2">Item</th>
+                                                <th className="pb-2 text-right">Qty</th>
+                                                <th className="pb-2 text-right">Price</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {selectedInvoice.items.map((item, idx) => (
+                                                <tr key={idx} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                                                    <td className="py-2">{item.product.name}</td>
+                                                    <td className="py-2 text-right">{item.quantity}</td>
+                                                    {/* We assume price is total / qty roughly or needs item price from backend. Invoice type usually has this. */}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
 
-                                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-lg font-semibold">Total Amount</span>
-                                        <span className="text-2xl font-bold text-primary-600">
-                                            ₹{selectedInvoice.total.toLocaleString()}
-                                        </span>
+                                <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-800">
+                                    <div className="text-right space-y-1">
+                                        <div className="flex justify-between w-48 text-sm">
+                                            <span className="text-gray-500">Total</span>
+                                            <span className="font-bold text-lg">₹{selectedInvoice.total.toLocaleString()}</span>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div className="mt-8 flex justify-end gap-3">
+                                <Button variant="outline" onClick={() => setSelectedInvoice(null)}>Close</Button>
+                                <Button onClick={() => window.print()}>Print Invoice</Button>
                             </div>
                         </div>
                     </div>

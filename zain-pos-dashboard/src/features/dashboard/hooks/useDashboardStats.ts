@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { dashboardService, type DashboardStats } from '../services/dashboard.service';
 import { useSocket } from '@/hooks/useSocket';
+import { useDateFilter } from '@/contexts/DateFilterContext';
 import { socket } from '@/lib/socket';
 import { toast } from 'react-hot-toast';
 
@@ -9,12 +10,16 @@ export function useDashboardStats() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Get global date filter
+    const { dateRange } = useDateFilter();
+
     // Connect to socket via hook
     const { isConnected } = useSocket('main');
 
     const fetchStats = async () => {
+        setLoading(true);
         try {
-            const data = await dashboardService.getStats();
+            const data = await dashboardService.getStats(dateRange.startDate!, dateRange.endDate!);
             setStats(data);
             setError(null);
         } catch (err) {
@@ -26,8 +31,10 @@ export function useDashboardStats() {
     };
 
     useEffect(() => {
-        fetchStats();
-    }, []);
+        if (dateRange.startDate && dateRange.endDate) {
+            fetchStats();
+        }
+    }, [dateRange]);
 
     // Listen for realtime updates
     useEffect(() => {
