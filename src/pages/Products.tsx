@@ -12,6 +12,27 @@ import { StickerPrintModal } from '../components/ui/StickerPrintModal';
 import { Skeleton } from '../components/ui/Skeleton';
 
 export const Products: React.FC = () => {
+    type NumberInput = number | '';
+    type VariantForm = {
+        sku: string;
+        size: string;
+        color: string;
+        mrp: NumberInput;
+        sellingPrice: NumberInput;
+        costPrice: NumberInput;
+        stock: NumberInput;
+        minStock: NumberInput;
+        barcode: string;
+    };
+    type ProductForm = {
+        name: string;
+        categoryId: string;
+        hsn: string;
+        taxRate: NumberInput;
+        barcode: string;
+        variants: VariantForm[];
+    };
+
     const { user } = useAuthStore();
     const [products, setProducts] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
@@ -23,26 +44,36 @@ export const Products: React.FC = () => {
     const [selectedProduct, setSelectedProduct] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    const [formData, setFormData] = useState({
+    const EMPTY_VARIANT: VariantForm = {
+        sku: '',
+        size: '',
+        color: '',
+        mrp: 0,
+        sellingPrice: 0,
+        costPrice: 0,
+        stock: 0,
+        minStock: 5,
+        barcode: '',
+    };
+
+    const [formData, setFormData] = useState<ProductForm>({
         name: '',
         categoryId: '',
         hsn: '',
         taxRate: 5,
         barcode: '',
-        variants: [
-            {
-                sku: '',
-                size: '',
-                color: '',
-                mrp: 0,
-                sellingPrice: 0,
-                costPrice: 0,
-                stock: 0,
-                minStock: 5,
-                barcode: '',
-            },
-        ],
+        variants: [EMPTY_VARIANT],
     });
+
+    const parseNumberInput = (raw: string, isInt = false): NumberInput => {
+        if (raw.trim() === '') return '';
+        const parsed = isInt ? parseInt(raw, 10) : parseFloat(raw);
+        return Number.isFinite(parsed) ? parsed : '';
+    };
+
+    const toNumber = (value: NumberInput, fallback = 0): number => {
+        return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+    };
 
     useEffect(() => {
         loadData();
@@ -161,15 +192,41 @@ export const Products: React.FC = () => {
                         name: formData.name,
                         categoryId: formData.categoryId,
                         hsn: formData.hsn,
-                        taxRate: formData.taxRate,
+                        taxRate: toNumber(formData.taxRate, 5),
                     },
                 });
 
-                // Update barcode of first variant if provided
-                if (formData.barcode && editingProduct.variants.length > 0) {
+                // Update first variant details in edit mode to match create form capability
+                const firstVariant = formData.variants[0];
+                if (firstVariant && editingProduct.variants.length > 0) {
                     await db.productVariants.update({
                         where: { id: editingProduct.variants[0].id },
-                        data: { barcode: formData.barcode },
+                        data: {
+                            barcode: firstVariant.barcode || formData.barcode,
+                            size: firstVariant.size || '',
+                            color: firstVariant.color || '',
+                            mrp: toNumber(firstVariant.mrp),
+                            sellingPrice: toNumber(firstVariant.sellingPrice),
+                            costPrice: toNumber(firstVariant.costPrice),
+                            stock: toNumber(firstVariant.stock),
+                            minStock: toNumber(firstVariant.minStock),
+                        },
+                    });
+                } else if (firstVariant && editingProduct.variants.length === 0) {
+                    await db.productVariants.create({
+                        data: {
+                            productId: editingProduct.id,
+                            sku: firstVariant.sku || `SKU-${Date.now()}`,
+                            barcode: firstVariant.barcode || formData.barcode || barcodeService.generateBarcode(),
+                            size: firstVariant.size || '',
+                            color: firstVariant.color || '',
+                            mrp: toNumber(firstVariant.mrp),
+                            sellingPrice: toNumber(firstVariant.sellingPrice),
+                            costPrice: toNumber(firstVariant.costPrice),
+                            stock: toNumber(firstVariant.stock),
+                            minStock: toNumber(firstVariant.minStock),
+                            isActive: true,
+                        }
                     });
                 }
             } else {
@@ -179,18 +236,18 @@ export const Products: React.FC = () => {
                         name: formData.name,
                         categoryId: formData.categoryId,
                         hsn: formData.hsn,
-                        taxRate: formData.taxRate,
+                        taxRate: toNumber(formData.taxRate, 5),
                         variants: {
                             create: formData.variants.map((v) => ({
                                 sku: v.sku || `SKU-${Date.now()}`,
                                 barcode: v.barcode || barcodeService.generateBarcode(),
                                 size: v.size,
                                 color: v.color,
-                                mrp: v.mrp,
-                                sellingPrice: v.sellingPrice,
-                                costPrice: v.costPrice,
-                                stock: v.stock,
-                                minStock: v.minStock,
+                                mrp: toNumber(v.mrp),
+                                sellingPrice: toNumber(v.sellingPrice),
+                                costPrice: toNumber(v.costPrice),
+                                stock: toNumber(v.stock),
+                                minStock: toNumber(v.minStock),
                             })),
                         },
                     },
@@ -213,21 +270,15 @@ export const Products: React.FC = () => {
             hsn: '',
             taxRate: 5,
             barcode: '',
-            variants: [
-                {
-                    sku: '',
-                    size: '',
-                    color: '',
-                    mrp: 0,
-                    sellingPrice: 0,
-                    costPrice: 0,
-                    stock: 0,
-                    minStock: 5,
-                    barcode: '',
-                },
-            ],
+            variants: [EMPTY_VARIANT],
         });
         setEditingProduct(null);
+    };
+
+    const updateVariantField = (index: number, key: string, value: any) => {
+        const newVariants = [...formData.variants];
+        (newVariants[index] as any)[key] = value;
+        setFormData({ ...formData, variants: newVariants });
     };
 
     const handleDeleteProduct = async (product: any) => {
@@ -352,16 +403,16 @@ export const Products: React.FC = () => {
                                                     size="sm"
                                                     onClick={() => {
                                                         setEditingProduct(product);
-                                                        setFormData({
-                                                            name: product.name,
-                                                            categoryId: product.categoryId,
-                                                            hsn: product.hsn || '',
-                                                            taxRate: product.taxRate,
-                                                            barcode: product.variants[0]?.barcode || '',
-                                                            variants: product.variants,
-                                                        });
-                                                        setShowModal(true);
-                                                    }}
+                                                    setFormData({
+                                                        name: product.name,
+                                                        categoryId: product.categoryId,
+                                                        hsn: product.hsn || '',
+                                                        taxRate: product.taxRate,
+                                                        barcode: product.variants[0]?.barcode || '',
+                                                        variants: product.variants.length > 0 ? [product.variants[0]] : [EMPTY_VARIANT],
+                                                    });
+                                                    setShowModal(true);
+                                                }}
                                                 >
                                                     <Edit className="w-4 h-4" />
                                                 </Button>
@@ -435,55 +486,33 @@ export const Products: React.FC = () => {
                             type="number"
                             value={formData.taxRate}
                             onChange={(e) =>
-                                setFormData({ ...formData, taxRate: parseFloat(e.target.value) })
+                                setFormData({ ...formData, taxRate: parseNumberInput(e.target.value) })
                             }
                             step="0.01"
                             required
                         />
                     </div>
 
-                    {editingProduct && (
-                        <Input
-                            label="Item Code / Barcode"
-                            value={formData.barcode}
-                            onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                            placeholder="Scan or enter barcode"
-                        />
-                    )}
-
-                    {!editingProduct && (
-                        <>
-                            <h3 className="font-semibold mt-6">Variant Details</h3>
-                            {formData.variants.map((variant, index) => (
+                    <>
+                        <h3 className="font-semibold mt-6">Variant Details</h3>
+                        {(editingProduct ? formData.variants.slice(0, 1) : formData.variants).map((variant, index) => (
                                 <div key={index} className="p-4 border border-gray-200 dark:border-dark-border rounded-lg space-y-3">
                                     <div className="grid grid-cols-2 gap-3">
                                         <Input
                                             label="Size"
                                             value={variant.size}
-                                            onChange={(e) => {
-                                                const newVariants = [...formData.variants];
-                                                newVariants[index].size = e.target.value;
-                                                setFormData({ ...formData, variants: newVariants });
-                                            }}
+                                            onChange={(e) => updateVariantField(index, 'size', e.target.value)}
                                         />
                                         <Input
                                             label="Color"
                                             value={variant.color}
-                                            onChange={(e) => {
-                                                const newVariants = [...formData.variants];
-                                                newVariants[index].color = e.target.value;
-                                                setFormData({ ...formData, variants: newVariants });
-                                            }}
+                                            onChange={(e) => updateVariantField(index, 'color', e.target.value)}
                                         />
                                         <div className="relative">
                                             <Input
                                                 label="Barcode / Item Code"
                                                 value={variant.barcode || ''}
-                                                onChange={(e) => {
-                                                    const newVariants = [...formData.variants];
-                                                    (newVariants[index] as any).barcode = e.target.value;
-                                                    setFormData({ ...formData, variants: newVariants });
-                                                }}
+                                                onChange={(e) => updateVariantField(index, 'barcode', e.target.value)}
                                                 placeholder="Enter or Generate"
                                             />
                                             <button
@@ -500,11 +529,7 @@ export const Products: React.FC = () => {
                                             label="MRP"
                                             type="number"
                                             value={variant.mrp}
-                                            onChange={(e) => {
-                                                const newVariants = [...formData.variants];
-                                                newVariants[index].mrp = parseFloat(e.target.value);
-                                                setFormData({ ...formData, variants: newVariants });
-                                            }}
+                                            onChange={(e) => updateVariantField(index, 'mrp', parseNumberInput(e.target.value))}
                                             step="0.01"
                                             required
                                         />
@@ -512,11 +537,7 @@ export const Products: React.FC = () => {
                                             label="Selling Price"
                                             type="number"
                                             value={variant.sellingPrice}
-                                            onChange={(e) => {
-                                                const newVariants = [...formData.variants];
-                                                newVariants[index].sellingPrice = parseFloat(e.target.value);
-                                                setFormData({ ...formData, variants: newVariants });
-                                            }}
+                                            onChange={(e) => updateVariantField(index, 'sellingPrice', parseNumberInput(e.target.value))}
                                             step="0.01"
                                             required
                                         />
@@ -524,43 +545,30 @@ export const Products: React.FC = () => {
                                             label="Cost Price"
                                             type="number"
                                             value={variant.costPrice}
-                                            onChange={(e) => {
-                                                const newVariants = [...formData.variants];
-                                                newVariants[index].costPrice = parseFloat(e.target.value);
-                                                setFormData({ ...formData, variants: newVariants });
-                                            }}
+                                            onChange={(e) => updateVariantField(index, 'costPrice', parseNumberInput(e.target.value))}
                                             step="0.01"
                                             required
                                         />
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Input
-                                            label="Initial Stock"
+                                            label={editingProduct ? 'Stock' : 'Initial Stock'}
                                             type="number"
                                             value={variant.stock}
-                                            onChange={(e) => {
-                                                const newVariants = [...formData.variants];
-                                                newVariants[index].stock = parseInt(e.target.value);
-                                                setFormData({ ...formData, variants: newVariants });
-                                            }}
+                                            onChange={(e) => updateVariantField(index, 'stock', parseNumberInput(e.target.value, true))}
                                             required
                                         />
                                         <Input
                                             label="Min Stock"
                                             type="number"
                                             value={variant.minStock}
-                                            onChange={(e) => {
-                                                const newVariants = [...formData.variants];
-                                                newVariants[index].minStock = parseInt(e.target.value);
-                                                setFormData({ ...formData, variants: newVariants });
-                                            }}
+                                            onChange={(e) => updateVariantField(index, 'minStock', parseNumberInput(e.target.value, true))}
                                             required
                                         />
                                     </div>
                                 </div>
-                            ))}
-                        </>
-                    )}
+                        ))}
+                    </>
 
                     <div className="flex gap-2 pt-4">
                         <Button type="submit" variant="primary" className="flex-1">
