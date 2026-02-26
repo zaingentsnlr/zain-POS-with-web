@@ -286,6 +286,11 @@ export const printService = {
         method: 'findUnique',
         args: { where: { key: 'LABEL_LAYOUT' } }
       });
+      const printerConfigResult = await window.electronAPI.db.query({
+        model: 'setting',
+        method: 'findUnique',
+        args: { where: { key: 'PRINTER_CONFIG' } }
+      });
 
       // Parse layout or use default
       let blocks: LabelBlock[] = [];
@@ -358,9 +363,19 @@ export const printService = {
                     ${htmlContent}
                 </body>
                 </html>`;
+      let labelPrinterName: string | undefined;
+      if (printerConfigResult.success && printerConfigResult.data && printerConfigResult.data.value) {
+        const parsed = JSON.parse(printerConfigResult.data.value);
+        if (parsed?.labelPrinter && typeof parsed.labelPrinter === 'string') {
+          labelPrinterName = parsed.labelPrinter.trim();
+        }
+      }
 
       for (let i = 0; i < copies; i++) {
-        await window.electronAPI.print.label({ html });
+        await window.electronAPI.print.label({
+          html,
+          options: { deviceName: labelPrinterName }
+        });
         if (copies > 1) await new Promise(r => setTimeout(r, 500));
       }
     } catch (error) {

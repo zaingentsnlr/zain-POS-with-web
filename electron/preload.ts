@@ -32,6 +32,8 @@ const api = {
         checkout: (data: any) => ipcRenderer.invoke('sales:checkout', data),
         updatePayment: (data: { saleId: string, paymentData: any, userId: string }) =>
             ipcRenderer.invoke('sales:updatePayment', data),
+        updateSale: (data: { saleId: string, saleData: any, userId: string }) =>
+            ipcRenderer.invoke('sales:updateSale', data),
         exchange: (data: any) => ipcRenderer.invoke('sales:exchange', data),
         refund: (data: any) => ipcRenderer.invoke('sales:refund', data),
     },

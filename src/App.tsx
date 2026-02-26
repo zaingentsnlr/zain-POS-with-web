@@ -20,6 +20,12 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 };
 
+const InsightsRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const user = useAuthStore((state) => state.user);
+    const allowed = !!user && (user.role === 'ADMIN' || user.permViewInsights);
+    return allowed ? <>{children}</> : <Navigate to="/pos" replace />;
+};
+
 function App() {
     return (
         <HashRouter>
@@ -43,7 +49,14 @@ function App() {
                     <Route path="users" element={<Users />} />
                     <Route path="permissions" element={<Permissions />} />
                     <Route path="activity" element={<ActivityPage />} />
-                    <Route path="forecasting" element={<Forecasting />} />
+                    <Route
+                        path="forecasting"
+                        element={
+                            <InsightsRoute>
+                                <Forecasting />
+                            </InsightsRoute>
+                        }
+                    />
                 </Route>
             </Routes>
         </HashRouter>

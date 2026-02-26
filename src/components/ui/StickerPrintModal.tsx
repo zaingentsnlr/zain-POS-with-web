@@ -43,6 +43,11 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
     product,
     variant,
 }) => {
+    // Barcode rendering tuned for thermal label scanners:
+    // add quiet zone and avoid ultra-thin bars that fail intermittently.
+    const BARCODE_MODULE_WIDTH = 1.4;
+    const BARCODE_QUIET_MARGIN = 6;
+
     const [quantity, setQuantity] = useState(1);
     const [layout, setLayout] = useState<LabelBlock[]>(DEFAULT_LABEL_LAYOUT);
     const [shopSettings, setShopSettings] = useState<any>({ shopName: 'Zain POS' });
@@ -87,7 +92,7 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
             }
 
             if (configResult && configResult.value) {
-                setConfig(JSON.parse(configResult.value));
+                setConfig(prev => ({ ...prev, ...JSON.parse(configResult.value) }));
             }
         } catch (error) {
             console.error('Failed to load settings:', error);
@@ -103,11 +108,13 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
                     document.querySelectorAll('.preview-barcode').forEach((element) => {
                         JsBarcode(element, variant.barcode || variant.sku, {
                             format: 'CODE128',
-                            width: 1.5,
+                            width: BARCODE_MODULE_WIDTH,
                             height: 40,
                             displayValue: false,
                             fontSize: 10,
-                            margin: 0
+                            margin: BARCODE_QUIET_MARGIN,
+                            lineColor: '#000000',
+                            background: '#ffffff'
                         });
                     });
                 } catch (error) {
@@ -165,11 +172,56 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
         }
     };
 
-    const handlePrint = () => {
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) return;
+    const escapeHtml = (value: string) =>
+        value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
 
-        const stickersHTML = Array(quantity).fill(null).map((_, index) => {
+    const createBarcodeSvgMarkup = (code: string, height: number) => {
+        try {
+            const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            JsBarcode(svgEl, code, {
+                format: 'CODE128',
+                width: BARCODE_MODULE_WIDTH,
+                height,
+                displayValue: false,
+                margin: BARCODE_QUIET_MARGIN,
+                lineColor: '#000000',
+                background: '#ffffff'
+            });
+            return new XMLSerializer().serializeToString(svgEl);
+        } catch (error) {
+            console.error('Failed to build barcode markup:', error);
+            return '';
+        }
+    };
+
+    const handlePrint = async () => {
+        let labelPrinterName: string | undefined;
+        try {
+            const printerSetting = await db.settings.findUnique({ where: { key: 'PRINTER_CONFIG' } });
+            if (printerSetting?.value) {
+                const parsed = JSON.parse(printerSetting.value);
+                if (parsed?.labelPrinter && typeof parsed.labelPrinter === 'string') {
+                    labelPrinterName = parsed.labelPrinter.trim();
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load printer config for label print:', error);
+        }
+
+        const safeMarginLeft = Math.max(0, Number(config.marginLeft) || 0);
+        const safeMarginTop = Math.max(0, Number(config.marginTop) || 0);
+        const rowCount = Math.ceil(quantity / config.perRow);
+        const rowPitchMm = config.height;
+        const sheetWidthMm = (config.width * config.perRow) + (config.gapX * (config.perRow - 1));
+        const pageWidthMm = sheetWidthMm + safeMarginLeft;
+        const pageHeightMm = rowPitchMm + safeMarginTop;
+
+        const buildStickerHtml = () => {
             const blocksHTML = layout.map(block => {
                 if (!block.visible) return '';
 
@@ -192,16 +244,20 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
                     case 'price':
                         return `<div style="${style}">MRP: ${formatIndianCurrency(variant.mrp)}</div>`;
                     case 'barcode':
+                        const barcodeMarkup = createBarcodeSvgMarkup(
+                            String(variant.barcode || variant.sku || ''),
+                            block.styles.height || 30
+                        );
                         return `<div style="${style} display: flex; justify-content: ${block.styles.align || 'center'};">
-                                    <svg id="barcode-${index}-${block.id}" class="barcode-svg" data-height="${block.styles.height || 30}"></svg>
+                                    ${barcodeMarkup || `<div style="font-size:8pt;">${escapeHtml(String(variant.barcode || variant.sku || ''))}</div>`}
                                 </div>`;
                     case 'text':
-                        return `<div style="${style}">${block.content}</div>`;
+                        return `<div style="${style}">${escapeHtml(block.content || '')}</div>`;
                     case 'product_code':
-                        return `<div style="${style}">SKU: ${variant.sku}</div>`;
+                        return `<div style="${style}">SKU: ${escapeHtml(String(variant.sku || ''))}</div>`;
                     case 'meta_row':
                         return `<div style="${style} display: flex; justify-content: space-between;">
-                                    <span>${variant.sku}</span>
+                                    <span>${escapeHtml(String(variant.sku || ''))}</span>
                                     <span>${formatIndianCurrency(variant.sellingPrice)}</span>
                                 </div>`;
                     case 'divider':
@@ -212,95 +268,105 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
                 }
             }).join('');
 
-            const isLastInRow = (index + 1) % config.perRow === 0;
-            const marginRight = isLastInRow ? 0 : config.gapX;
-
-            return `<div class="sticker" style="margin-right: ${marginRight}mm; margin-bottom: ${config.gapY}mm;">
+            return `<div class="sticker">
                         <div class="content-wrapper">
                             ${blocksHTML}
                         </div>
                     </div>`;
-        }).join('');
+        };
 
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Print Stickers - ${product.name}</title>
-                <style>
-                    @media print {
-                        @page {
-                            size: auto;
-                            margin: 0mm;
-                        }
-                        body {
-                            margin: 0;
-                            padding: 0;
-                        }
+        try {
+            for (let row = 0; row < rowCount; row++) {
+                const stickersInThisRow = Math.min(config.perRow, quantity - (row * config.perRow));
+                const rowStickers = Array(stickersInThisRow).fill(null).map(() => buildStickerHtml());
+                const emptySlots = Math.max(0, config.perRow - stickersInThisRow);
+                for (let i = 0; i < emptySlots; i++) {
+                    rowStickers.push(`<div class="sticker blank"></div>`);
+                }
+
+                const html = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Print Stickers - ${product.name}</title>
+                        <style>
+                            @media print {
+                                @page {
+                                    size: ${pageWidthMm}mm ${pageHeightMm}mm;
+                                    margin: 0mm;
+                                }
+                                body {
+                                    margin: 0;
+                                    padding: 0;
+                                }
+                            }
+                            html, body {
+                                width: ${pageWidthMm}mm;
+                                height: ${pageHeightMm}mm;
+                                margin: 0;
+                                padding: 0;
+                                overflow: hidden;
+                                background: #fff;
+                            }
+                            body {
+                                font-family: Arial, sans-serif;
+                                box-sizing: border-box;
+                            }
+                            .sheet {
+                                width: ${sheetWidthMm}mm;
+                                height: ${rowPitchMm}mm;
+                                display: grid;
+                                grid-template-columns: repeat(${config.perRow}, ${config.width}mm);
+                                grid-auto-rows: ${config.height}mm;
+                                column-gap: ${config.gapX}mm;
+                                transform: translate(${safeMarginLeft}mm, ${safeMarginTop}mm);
+                                transform-origin: top left;
+                            }
+                            .sticker {
+                                width: ${config.width}mm;
+                                height: ${config.height}mm;
+                                padding: 1mm;
+                                box-sizing: border-box;
+                                display: block;
+                                overflow: hidden;
+                                flex-direction: column;
+                            }
+                            .sticker.blank {
+                                visibility: hidden;
+                            }
+                            .sticker > div {
+                                font-size: 10pt;
+                            }
+                            .content-wrapper {
+                                transform: scale(${config.contentScale / 100});
+                                transform-origin: top left;
+                                width: ${100 * (100 / config.contentScale)}%;
+                                height: ${100 * (100 / config.contentScale)}%;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="sheet">${rowStickers.join('')}</div>
+                    </body>
+                    </html>
+                `;
+
+                const result = await window.electronAPI.print.label({
+                    html,
+                    options: {
+                        pageWidthMm,
+                        pageHeightMm,
+                        deviceName: labelPrinterName
                     }
-                        body {
-                            font-family: Arial, sans-serif;
-                            margin: 0;
-                            padding-left: ${config.marginLeft}mm;
-                            padding-top: ${config.marginTop}mm;
-                            width: ${(config.width + config.gapX) * config.perRow}mm;
-                            font-size: 0; /* Remove whitespace between inline-block elements */
-                        }
-                    .sticker {
-                        width: ${config.width}mm;
-                        height: ${config.height}mm;
-                        padding: 1mm; /* Reduced padding */
-                        box-sizing: border-box;
-                        display: inline-block;
-                        vertical-align: top;
-                        overflow: hidden;
-                        /* border: 1px dashed #eee; */ /* Debug border removed for cleaner print */
-                        flex-direction: column;
-                        page-break-inside: avoid;
-                    }
-                    /* Restore font size for content */
-                    .sticker > div {
-                        font-size: 10pt; 
-                    }
-                    .content-wrapper {
-                        transform: scale(${config.contentScale / 100});
-                        transform-origin: top left;
-                        width: ${100 * (100 / config.contentScale)}%;
-                        height: ${100 * (100 / config.contentScale)}%;
-                    }
-                    .barcode-svg {
-                        max-width: 100%;
-                    }
-                </style>
-                <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-            </head>
-            <body>
-                ${stickersHTML}
-                <script>
-                    window.onload = function() {
-                        // Generate barcodes for each sticker
-                         document.querySelectorAll('.barcode-svg').forEach(svg => {
-                             const height = svg.getAttribute('data-height');
-                            JsBarcode(svg, '${variant.barcode || variant.sku}', {
-                                format: 'CODE128',
-                                width: 1.5,
-                                height: parseInt(height) || 30,
-                                displayValue: false,
-                                fontSize: 10,
-                                margin: 0
-                            });
-                         });
-                        
-                        setTimeout(() => {
-                            window.print();
-                            window.close();
-                        }, 500);
-                    };
-                </script>
-            </body>
-            </html>
-        `);
-        printWindow.document.close();
+                });
+                if (!result?.success) {
+                    alert(`Label print failed on row ${row + 1}: ${result?.error || 'Unknown error'}`);
+                    return;
+                }
+            }
+        } catch (error: any) {
+            alert(`Label print failed: ${error?.message || error}`);
+        }
     };
 
     if (!product || !variant) return null;

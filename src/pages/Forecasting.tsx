@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import {
     BrainCircuit,
     TrendingUp,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { db } from '../lib/db';
 import { formatIndianCurrency } from '../lib/format';
+import { useAuthStore } from '../store/authStore';
 import { format, startOfYear, endOfYear, eachMonthOfInterval, isWithinInterval, subYears } from 'date-fns';
 import {
     LineChart,
@@ -40,10 +42,16 @@ const KERALA_FESTIVALS = [
 ];
 
 export const Forecasting: React.FC = () => {
+    const user = useAuthStore((state) => state.user);
+    const canViewInsights = !!user && (user.role === 'ADMIN' || user.permViewInsights);
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<any>(null);
     const [forecastData, setForecastData] = useState<any[]>([]);
     const [seasonalInsights, setSeasonalInsights] = useState<any[]>([]);
+
+    if (!canViewInsights) {
+        return <Navigate to="/pos" replace />;
+    }
 
     useEffect(() => {
         analyzeSales();

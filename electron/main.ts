@@ -64,22 +64,29 @@ async function performAutoBackup() {
         if (!fs.existsSync(actualDbPath)) return;
 
         const backupDir = path.join(app.getPath('userData'), 'backups');
-        if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+        await fs.promises.mkdir(backupDir, { recursive: true });
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const backupPath = path.join(backupDir, `backup-${timestamp}.db`);
 
-        fs.copyFileSync(actualDbPath, backupPath);
+        await fs.promises.copyFile(actualDbPath, backupPath);
         console.log(`[Backup] Created: ${backupPath}`);
 
         // Keep last 10 backups
-        const files = fs.readdirSync(backupDir)
-            .filter(f => f.startsWith('backup-'))
-            .map(f => ({ name: f, time: fs.statSync(path.join(backupDir, f)).mtime.getTime() }))
-            .sort((a, b) => b.time - a.time);
+        const fileNames = await fs.promises.readdir(backupDir);
+        const files = (await Promise.all(
+            fileNames
+                .filter(f => f.startsWith('backup-'))
+                .map(async f => ({
+                    name: f,
+                    time: (await fs.promises.stat(path.join(backupDir, f))).mtime.getTime()
+                }))
+        )).sort((a, b) => b.time - a.time);
 
         if (files.length > 10) {
-            files.slice(10).forEach(f => fs.unlinkSync(path.join(backupDir, f.name)));
+            await Promise.all(
+                files.slice(10).map(f => fs.promises.unlink(path.join(backupDir, f.name)).catch(() => { }))
+            );
         }
     } catch (err) {
         console.error('Auto-backup failed:', err);
@@ -727,20 +734,28 @@ ipcMain.handle('sales:checkout', async (_event, saleData) => {
 ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, userId }) => {
     return await prisma.$transaction(async (tx: any) => {
         try {
-            // 1. Verify Permission
+            // 1. Load user and sale
             const user = await tx.user.findUnique({ where: { id: userId } });
-            if (user?.role !== 'ADMIN' && !user?.permChangePayment) {
-                throw new Error("Unauthorized: You do not have permission to change payment modes.");
-            }
-
-            // 2. Fetch Original Sale
             const originalSale = await tx.sale.findUnique({
                 where: { id: saleId },
                 include: { payments: true }
             });
             if (!originalSale) throw new Error("Sale not found.");
 
-            // 3. Update Sale Record
+            const isExchangeGeneratedSale =
+                originalSale.paymentMethod === 'EXCHANGE' ||
+                (originalSale.remarks || '').includes('Replacement sale for Invoice');
+
+            const canChangePayment =
+                user?.role === 'ADMIN' ||
+                !!user?.permChangePayment ||
+                (isExchangeGeneratedSale && !!user?.permEditSales);
+
+            if (!canChangePayment) {
+                throw new Error("Unauthorized: You do not have permission to change payment modes.");
+            }
+
+            // 2. Update Sale Record
             const updatedSale = await tx.sale.update({
                 where: { id: saleId },
                 data: {
@@ -750,7 +765,7 @@ ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, user
                 }
             });
 
-            // 4. Update Payments (Delete and Re-create)
+            // 3. Update Payments (Delete and Re-create)
             await tx.invoicePayment.deleteMany({ where: { saleId } });
             await tx.invoicePayment.createMany({
                 data: (paymentData.payments || []).map((p: any) => ({
@@ -760,7 +775,7 @@ ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, user
                 }))
             });
 
-            // 5. Log Activity
+            // 4. Log Activity
             await tx.auditLog.create({
                 data: {
                     action: 'PAYMENT_UPDATE',
@@ -769,7 +784,7 @@ ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, user
                 }
             });
 
-            // 6. Return refreshed sale
+            // 5. Return refreshed sale
             return {
                 success: true,
                 data: await tx.sale.findUnique({
@@ -784,11 +799,175 @@ ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, user
     });
 });
 
+// Update Sale (Items + Amounts + Payments) from POS Edit Screen
+ipcMain.handle('sales:updateSale', async (_event, { saleId, saleData, userId }) => {
+    return await prisma.$transaction(async (tx: any) => {
+        try {
+            // 1. Verify Permission
+            const user = await tx.user.findUnique({ where: { id: userId } });
+            if (user?.role !== 'ADMIN' && !user?.permEditSales) {
+                throw new Error("Unauthorized: You do not have permission to edit finalized sales.");
+            }
+
+            // 2. Fetch Original Sale
+            const originalSale = await tx.sale.findUnique({
+                where: { id: saleId },
+                include: { items: true, payments: true }
+            });
+            if (!originalSale) throw new Error("Sale not found.");
+
+            const oldQtyByVariant = new Map<string, number>();
+            for (const item of originalSale.items) {
+                oldQtyByVariant.set(item.variantId, (oldQtyByVariant.get(item.variantId) || 0) + item.quantity);
+            }
+
+            const newItems = saleData.items || [];
+            const newQtyByVariant = new Map<string, number>();
+            for (const item of newItems) {
+                newQtyByVariant.set(item.variantId, (newQtyByVariant.get(item.variantId) || 0) + item.quantity);
+            }
+
+            const affectedVariantIds = new Set<string>([
+                ...oldQtyByVariant.keys(),
+                ...newQtyByVariant.keys()
+            ]);
+
+            // 3. Update stock based on quantity delta
+            for (const variantId of affectedVariantIds) {
+                const oldQty = oldQtyByVariant.get(variantId) || 0;
+                const newQty = newQtyByVariant.get(variantId) || 0;
+                const delta = newQty - oldQty;
+                if (delta === 0) continue;
+
+                if (delta > 0) {
+                    // More items sold now -> reduce stock
+                    await tx.productVariant.update({
+                        where: { id: variantId },
+                        data: { stock: { decrement: delta } }
+                    });
+                    await tx.inventoryMovement.create({
+                        data: {
+                            variantId,
+                            type: 'OUT',
+                            quantity: -delta,
+                            reason: `Sale Update: additional qty on Bill #${originalSale.billNo}`,
+                            reference: saleId,
+                            createdBy: userId
+                        }
+                    });
+                } else {
+                    // Fewer items sold now -> return stock
+                    const restockQty = Math.abs(delta);
+                    await tx.productVariant.update({
+                        where: { id: variantId },
+                        data: { stock: { increment: restockQty } }
+                    });
+                    await tx.inventoryMovement.create({
+                        data: {
+                            variantId,
+                            type: 'IN',
+                            quantity: restockQty,
+                            reason: `Sale Update: item removed/reduced on Bill #${originalSale.billNo}`,
+                            reference: saleId,
+                            createdBy: userId
+                        }
+                    });
+                }
+            }
+
+            // 4. Replace sale items with updated set
+            await tx.saleItem.deleteMany({ where: { saleId } });
+            if (newItems.length > 0) {
+                await tx.saleItem.createMany({
+                    data: newItems.map((item: any) => ({
+                        saleId,
+                        variantId: item.variantId,
+                        productName: item.productName,
+                        variantInfo: item.variantInfo,
+                        quantity: item.quantity,
+                        mrp: item.mrp,
+                        sellingPrice: item.sellingPrice,
+                        discount: item.discount || 0,
+                        taxRate: item.taxRate || 0,
+                        taxAmount: item.taxAmount || 0,
+                        total: item.total || 0
+                    }))
+                });
+            }
+
+            // 5. Update sale totals/header
+            const oldItemCount = originalSale.items.reduce((sum: number, it: any) => sum + it.quantity, 0);
+            const newItemCount = newItems.reduce((sum: number, it: any) => sum + (it.quantity || 0), 0);
+            const updateTag = `[UPDATE ${new Date().toISOString()}] POS edit: items ${oldItemCount} -> ${newItemCount}, total Rs.${originalSale.grandTotal.toFixed(2)} -> Rs.${saleData.grandTotal.toFixed(2)}`;
+
+            const updatedSale = await tx.sale.update({
+                where: { id: saleId },
+                data: {
+                    customerName: saleData.customerName,
+                    customerPhone: saleData.customerPhone,
+                    subtotal: saleData.subtotal,
+                    discount: saleData.discount || 0,
+                    discountPercent: saleData.discountPercent || 0,
+                    taxAmount: saleData.taxAmount || 0,
+                    cgst: saleData.cgst || 0,
+                    sgst: saleData.sgst || 0,
+                    grandTotal: saleData.grandTotal,
+                    paymentMethod: saleData.paymentMethod,
+                    paidAmount: saleData.paidAmount,
+                    changeAmount: saleData.changeAmount,
+                    remarks: originalSale.remarks ? `${originalSale.remarks}\n${updateTag}` : updateTag
+                }
+            });
+
+            // 6. Replace payments
+            await tx.invoicePayment.deleteMany({ where: { saleId } });
+            await tx.invoicePayment.createMany({
+                data: (saleData.payments || []).map((p: any) => ({
+                    saleId: saleId,
+                    paymentMode: p.paymentMode,
+                    amount: p.amount
+                }))
+            });
+
+            // 7. Log Activity
+            await tx.auditLog.create({
+                data: {
+                    action: 'SALE_UPDATE',
+                    details: `Sale #${originalSale.billNo} updated from POS. Old Total: Rs.${originalSale.grandTotal.toFixed(2)}, New Total: Rs.${updatedSale.grandTotal.toFixed(2)}`,
+                    userId: userId
+                }
+            });
+
+            // 8. Return refreshed sale
+            return {
+                success: true,
+                data: await tx.sale.findUnique({
+                    where: { id: saleId },
+                    include: { items: true, payments: true }
+                })
+            };
+        } catch (error: any) {
+            console.error('Update Sale failed:', error);
+            return { success: false, error: error.message };
+        }
+    });
+});
+
 // Professional Exchange Handler
 ipcMain.handle('sales:exchange', async (_event, exchangeData) => {
     return await prisma.$transaction(async (tx: any) => {
         try {
             const now = new Date();
+            const returnedItems = (exchangeData.items || []).filter((item: any) => item.returnedId && (item.returnedQty || 0) > 0);
+            const newItems = (exchangeData.items || []).filter((item: any) => item.newId && (item.newQty || 0) > 0);
+
+            const originalSale = await tx.sale.findUnique({
+                where: { id: exchangeData.originalInvoiceId },
+                include: { items: true }
+            });
+            if (!originalSale) {
+                throw new Error('Original invoice not found for exchange.');
+            }
 
             // 1. Create Exchange Entry
             const exchange = await tx.exchange.create({
@@ -813,7 +992,122 @@ ipcMain.handle('sales:exchange', async (_event, exchangeData) => {
                 }
             });
 
-            // 2. Adjust Stock for each item
+            // 2. Remove returned quantities from original sale items
+            for (const item of returnedItems) {
+                const saleItem = originalSale.items.find((si: any) => si.variantId === item.returnedId);
+                if (!saleItem) {
+                    throw new Error(`Returned item not found in original invoice: ${item.returnedId}`);
+                }
+                if (saleItem.quantity < item.returnedQty) {
+                    throw new Error(`Returned qty exceeds sold qty for ${saleItem.productName}`);
+                }
+
+                if (saleItem.quantity === item.returnedQty) {
+                    await tx.saleItem.delete({ where: { id: saleItem.id } });
+                } else {
+                    const newQty = saleItem.quantity - item.returnedQty;
+                    const unitDiscount = saleItem.quantity > 0 ? (saleItem.discount / saleItem.quantity) : 0;
+                    const unitTaxAmount = saleItem.quantity > 0 ? (saleItem.taxAmount / saleItem.quantity) : 0;
+                    const unitTotal = saleItem.quantity > 0 ? (saleItem.total / saleItem.quantity) : 0;
+
+                    await tx.saleItem.update({
+                        where: { id: saleItem.id },
+                        data: {
+                            quantity: newQty,
+                            discount: unitDiscount * newQty,
+                            taxAmount: unitTaxAmount * newQty,
+                            total: unitTotal * newQty
+                        }
+                    });
+                }
+            }
+
+            // 3. Flag original invoice with replacement note
+            const replacementTag = `[EXCHANGE ${now.toISOString()}] Returned items auto-removed; replacement billed as new sale. Ref: ${exchange.id}`;
+            await tx.sale.update({
+                where: { id: originalSale.id },
+                data: {
+                    remarks: originalSale.remarks ? `${originalSale.remarks}\n${replacementTag}` : replacementTag
+                }
+            });
+
+            // 4. Create replacement sale on exchange date
+            let replacementSale: any = null;
+            if (newItems.length > 0) {
+                const replacementPaymentMethod = ['CASH', 'CARD', 'UPI', 'SPLIT'].includes(exchangeData.replacementPaymentMethod)
+                    ? exchangeData.replacementPaymentMethod
+                    : (['CASH', 'CARD', 'UPI', 'SPLIT'].includes(originalSale.paymentMethod) ? originalSale.paymentMethod : 'CASH');
+
+                const lastSale = await tx.sale.findFirst({
+                    orderBy: { billNo: 'desc' },
+                    select: { billNo: true }
+                });
+                const nextBillNo = (lastSale?.billNo || 0) + 1;
+
+                const replacementVariants = await tx.productVariant.findMany({
+                    where: { id: { in: newItems.map((i: any) => i.newId) } },
+                    include: { product: true }
+                });
+
+                const replacementSaleItems = newItems.map((item: any) => {
+                    const variant = replacementVariants.find((v: any) => v.id === item.newId);
+                    const taxRate = variant?.product?.taxRate || 0;
+                    const lineBase = (item.newQty || 0) * (variant?.sellingPrice || 0);
+                    const lineTax = taxRate > 0 ? (lineBase * taxRate) / (100 + taxRate) : 0;
+
+                    return {
+                        variantId: item.newId,
+                        productName: variant?.product?.name || 'Unknown Item',
+                        variantInfo: `${variant?.size || ''} ${variant?.color || ''}`.trim(),
+                        quantity: item.newQty || 0,
+                        mrp: variant?.mrp || variant?.sellingPrice || 0,
+                        sellingPrice: variant?.sellingPrice || 0,
+                        discount: 0,
+                        taxRate,
+                        taxAmount: lineTax,
+                        total: lineBase
+                    };
+                });
+
+                const subtotal = replacementSaleItems.reduce((sum: number, line: any) => sum + (line.sellingPrice * line.quantity), 0);
+                const taxAmount = replacementSaleItems.reduce((sum: number, line: any) => sum + line.taxAmount, 0);
+                const totalNewValue = replacementSaleItems.reduce((sum: number, line: any) => sum + line.total, 0);
+                const totalReturnedValue = returnedItems.reduce((sum: number, item: any) => sum + Math.abs(item.priceDiff || 0), 0);
+                const exchangeCreditApplied = Math.min(totalReturnedValue, totalNewValue);
+                const netPayable = Math.max(0, totalNewValue - exchangeCreditApplied);
+
+                replacementSale = await tx.sale.create({
+                    data: {
+                        billNo: nextBillNo,
+                        userId: exchangeData.userId,
+                        customerName: originalSale.customerName,
+                        customerPhone: originalSale.customerPhone,
+                        subtotal,
+                        discount: exchangeCreditApplied,
+                        discountPercent: 0,
+                        taxAmount,
+                        cgst: taxAmount / 2,
+                        sgst: taxAmount / 2,
+                        grandTotal: netPayable,
+                        paymentMethod: replacementPaymentMethod,
+                        paidAmount: netPayable,
+                        changeAmount: 0,
+                        remarks: `Replacement sale for Invoice #${originalSale.billNo}. Exchange Ref: ${exchange.id}. New: Rs.${totalNewValue.toFixed(2)}, Credit: Rs.${exchangeCreditApplied.toFixed(2)}, Payable: Rs.${netPayable.toFixed(2)}`,
+                        createdAt: now,
+                        items: {
+                            create: replacementSaleItems
+                        },
+                        payments: {
+                            create: netPayable > 0 ? [{
+                                paymentMode: replacementPaymentMethod,
+                                amount: netPayable
+                            }] : []
+                        }
+                    }
+                });
+            }
+
+            // 5. Adjust Stock for each exchange item
             for (const item of exchangeData.items) {
                 // Returned Item -> Increase Stock
                 if (item.returnedId) {
@@ -854,24 +1148,23 @@ ipcMain.handle('sales:exchange', async (_event, exchangeData) => {
                 }
             }
 
-            // 3. Log Activity
+            // 6. Log Activity
             await tx.auditLog.create({
                 data: {
                     action: 'EXCHANGE',
-                    details: `Exchange processed for Invoice ID ${exchangeData.originalInvoiceId}.Diff: ₹${exchangeData.differenceAmount.toFixed(2)} `,
+                    details: `Exchange processed for Invoice ID ${exchangeData.originalInvoiceId}. Diff: Rs.${exchangeData.differenceAmount.toFixed(2)}${replacementSale ? `, Replacement Sale #${replacementSale.billNo}` : ''}`,
                     userId: exchangeData.userId,
                     createdAt: now
                 }
             });
 
-            return { success: true, data: exchange };
+            return { success: true, data: { exchange, replacementSaleId: replacementSale?.id || null } };
         } catch (error: any) {
             console.error('Exchange failed:', error);
             throw error;
         }
     });
 });
-
 // Professional Refund Handler
 ipcMain.handle('sales:refund', async (_event, refundData) => {
     return await prisma.$transaction(async (tx: any) => {
@@ -952,12 +1245,23 @@ ipcMain.handle('print:receipt', async (_event, data) => {
         await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent.trim())}`);
 
         return new Promise((resolve) => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                try { printWindow.close(); } catch { }
+                resolve({ success: false, error: 'Print timeout: printer did not respond in time.' });
+            }, 15000);
+
             printWindow.webContents.print({
                 silent: true,
                 printBackground: true,
                 margins: { marginType: 'none' }
             }, (success, failureReason) => {
-                printWindow.close();
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                try { printWindow.close(); } catch { }
                 if (!success) {
                     console.error('Print failed:', failureReason);
                     resolve({ success: false, error: failureReason });
@@ -976,23 +1280,84 @@ ipcMain.handle('print:label', async (_event, data) => {
     try {
         const printWindow = new BrowserWindow({ show: false });
         const htmlContent = data.html || data;
+        const printOptions = data?.options || {};
+        const pageWidthMicrons = printOptions.pageWidthMm ? Math.round(Number(printOptions.pageWidthMm) * 1000) : undefined;
+        const pageHeightMicrons = printOptions.pageHeightMm ? Math.round(Number(printOptions.pageHeightMm) * 1000) : undefined;
+        const customPageSize = (pageWidthMicrons && pageHeightMicrons) ? { width: pageWidthMicrons, height: pageHeightMicrons } : undefined;
+        const deviceName = typeof printOptions.deviceName === 'string' && printOptions.deviceName.trim().length > 0
+            ? printOptions.deviceName.trim()
+            : undefined;
 
         await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent.trim())}`);
+        await new Promise((r) => setTimeout(r, 600)); // allow barcode script/layout to settle
 
         return new Promise((resolve) => {
-            printWindow.webContents.print({
-                silent: true,
-                printBackground: true,
-                margins: { marginType: 'none' }
-            }, (success, failureReason) => {
-                printWindow.close();
-                if (!success) {
-                    console.error('Label print failed:', failureReason);
-                    resolve({ success: false, error: failureReason });
-                } else {
-                    resolve({ success: true });
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                try { printWindow.close(); } catch { }
+                resolve({ success: false, error: 'Label print timeout: printer did not respond in time.' });
+            }, 15000);
+
+            const attempts: any[] = [
+                {
+                    silent: true,
+                    printBackground: true,
+                    landscape: false,
+                    margins: { marginType: 'none' },
+                    deviceName,
+                    pageSize: customPageSize as any
+                },
+                {
+                    silent: true,
+                    printBackground: true,
+                    landscape: false,
+                    margins: { marginType: 'none' },
+                    deviceName
+                },
+                {
+                    silent: true,
+                    printBackground: true,
+                    landscape: false,
+                    margins: { marginType: 'none' }
                 }
-            });
+            ];
+
+            let attemptIndex = 0;
+            const failures: string[] = [];
+            const runAttempt = () => {
+                const current = attempts[attemptIndex];
+                const hasPageSize = !!(current as any).pageSize;
+                console.log('[Label Print] Attempt:', attemptIndex + 1, 'Device:', current.deviceName || '(default)', 'PageSize:', hasPageSize ? 'custom' : 'driver-default');
+
+                printWindow.webContents.print(current, (success, failureReason) => {
+                    if (settled) return;
+                    console.log('[Label Print] Result:', success ? 'SUCCESS' : 'FAIL', failureReason || '');
+
+                    if (success) {
+                        settled = true;
+                        clearTimeout(timeout);
+                        try { printWindow.close(); } catch { }
+                        resolve({ success: true });
+                        return;
+                    }
+
+                    failures.push(failureReason || 'unknown');
+                    attemptIndex += 1;
+                    if (attemptIndex < attempts.length) {
+                        runAttempt();
+                        return;
+                    }
+
+                    settled = true;
+                    clearTimeout(timeout);
+                    try { printWindow.close(); } catch { }
+                    resolve({ success: false, error: `All label print attempts failed: ${failures.join(' | ')}` });
+                });
+            };
+
+            runAttempt();
         });
     } catch (error: any) {
         console.error('Print:Label Error:', error);
@@ -1729,3 +2094,4 @@ ipcMain.handle('cloud:syncNow', async () => {
         return { success: false, error: error.message };
     }
 });
+

@@ -47,6 +47,7 @@ export const Sales: React.FC = () => {
     const [exchangeNewItems, setExchangeNewItems] = useState<any[]>([]); // New items being taken
     const [allProducts, setAllProducts] = useState<any[]>([]);
     const [refundReason, setRefundReason] = useState('');
+    const [replacementPaymentMethod, setReplacementPaymentMethod] = useState<'CASH' | 'CARD' | 'UPI'>('CASH');
     const [diffAmount, setDiffAmount] = useState(0);
 
     // New stats states for entire filtered range
@@ -193,9 +194,34 @@ export const Sales: React.FC = () => {
     };
 
     const handleExchangeClick = async (sale: any) => {
+        const preparedReturnItems = sale.items
+            .map((item: any) => {
+                const returnedQty = (sale.exchanges || []).reduce((sum: number, ex: any) =>
+                    sum + (ex.items || [])
+                        .filter((ei: any) => ei.returnedItemId === item.variantId)
+                        .reduce((s: number, ei: any) => s + (ei.returnedQty || 0), 0), 0);
+                const refundedQty = (sale.refunds || []).reduce((sum: number, ref: any) =>
+                    sum + (ref.items || [])
+                        .filter((ri: any) => ri.variantId === item.variantId)
+                        .reduce((s: number, ri: any) => s + (ri.quantity || 0), 0), 0);
+                const availableQty = Math.max(0, item.quantity - returnedQty - refundedQty);
+                return { ...item, quantity: availableQty, returnQty: 0 };
+            })
+            .filter((item: any) => item.quantity > 0);
+
+        if (preparedReturnItems.length === 0) {
+            alert('No returnable items left for this bill.');
+            return;
+        }
+
+        if (preparedReturnItems.length === 1) {
+            preparedReturnItems[0].returnQty = preparedReturnItems[0].quantity;
+        }
+
         setSelectedSaleForAction(sale);
-        setReturnItems(sale.items.map((it: any) => ({ ...it, returnQty: 0 })));
+        setReturnItems(preparedReturnItems);
         setExchangeNewItems([]);
+        setReplacementPaymentMethod((sale.paymentMethod === 'CARD' || sale.paymentMethod === 'UPI') ? sale.paymentMethod : 'CASH');
         setDiffAmount(0);
         setIsExchangeModalOpen(true);
 
@@ -212,8 +238,32 @@ export const Sales: React.FC = () => {
     };
 
     const handleRefundClick = (sale: any) => {
+        const preparedReturnItems = sale.items
+            .map((item: any) => {
+                const returnedQty = (sale.exchanges || []).reduce((sum: number, ex: any) =>
+                    sum + (ex.items || [])
+                        .filter((ei: any) => ei.returnedItemId === item.variantId)
+                        .reduce((s: number, ei: any) => s + (ei.returnedQty || 0), 0), 0);
+                const refundedQty = (sale.refunds || []).reduce((sum: number, ref: any) =>
+                    sum + (ref.items || [])
+                        .filter((ri: any) => ri.variantId === item.variantId)
+                        .reduce((s: number, ri: any) => s + (ri.quantity || 0), 0), 0);
+                const availableQty = Math.max(0, item.quantity - returnedQty - refundedQty);
+                return { ...item, quantity: availableQty, refundQty: 0 };
+            })
+            .filter((item: any) => item.quantity > 0);
+
+        if (preparedReturnItems.length === 0) {
+            alert('No refundable items left for this bill.');
+            return;
+        }
+
+        if (preparedReturnItems.length === 1) {
+            preparedReturnItems[0].refundQty = preparedReturnItems[0].quantity;
+        }
+
         setSelectedSaleForAction(sale);
-        setReturnItems(sale.items.map((it: any) => ({ ...it, refundQty: 0 })));
+        setReturnItems(preparedReturnItems);
         setRefundReason('');
         setIsRefundModalOpen(true);
     };
@@ -247,9 +297,10 @@ export const Sales: React.FC = () => {
                 userId: user?.id,
                 differenceAmount: difference,
                 notes: `Exchange for Bill #${selectedSaleForAction.billNo}`,
+                replacementPaymentMethod,
                 items: [...returns, ...news],
                 payments: [{
-                    paymentMode: 'CASH', // Default for diff
+                    paymentMode: replacementPaymentMethod,
                     amount: difference
                 }]
             };
@@ -309,6 +360,8 @@ export const Sales: React.FC = () => {
         }
     };
 
+    const isSingleReturnItem = returnItems.length === 1;
+
     const confirmVoid = async () => {
         if (!voidSaleId || !voidReason.trim()) return;
 
@@ -356,8 +409,11 @@ export const Sales: React.FC = () => {
                 cardAmount: card > 0 ? card.toString() : ''
             });
         } else {
+            const preferredMode = ['CASH', 'UPI', 'CARD'].includes(currentMethod)
+                ? currentMethod
+                : (['CASH', 'UPI', 'CARD'].includes(sale.payments?.[0]?.paymentMode) ? sale.payments[0].paymentMode : 'CASH');
             setPaymentEditData({
-                method: currentMethod as any,
+                method: preferredMode as any,
                 cashAmount: '',
                 upiAmount: '',
                 cardAmount: ''
@@ -745,15 +801,28 @@ export const Sales: React.FC = () => {
                                                 {formatIndianCurrency(sale.grandTotal)}
                                             </td>
                                             <td>
-                                                <button
-                                                    onClick={() => sale.status !== 'VOIDED' && (user?.role === 'ADMIN' || user?.permChangePayment) && handleUpdatePayment(sale.id, sale.paymentMethod)}
-                                                    disabled={updatingPayment === sale.id || sale.status === 'VOIDED' || (user?.role !== 'ADMIN' && !user?.permChangePayment)}
-                                                    className={`transition-all ${sale.status !== 'VOIDED' && (user?.role === 'ADMIN' || user?.permChangePayment) ? 'cursor-pointer hover:scale-110 active:scale-90' : 'cursor-not-allowed opacity-70'}`}
-                                                >
-                                                    <span className={`badge py-1 px-3 ${sale.status === 'VOIDED' ? 'bg-red-100 text-red-800' : 'badge-info shadow-sm'} ${updatingPayment === sale.id ? 'opacity-50' : ''}`}>
-                                                        {updatingPayment === sale.id ? '...' : (sale.status === 'VOIDED' ? 'VOIDED' : sale.paymentMethod)}
-                                                    </span>
-                                                </button>
+                                                {(() => {
+                                                    const isExchangeGeneratedSale = sale.paymentMethod === 'EXCHANGE' || (sale.remarks || '').includes('Replacement sale for Invoice');
+                                                    const canUpdatePayment =
+                                                        sale.status !== 'VOIDED' && (
+                                                            user?.role === 'ADMIN' ||
+                                                            user?.permChangePayment ||
+                                                            (isExchangeGeneratedSale && user?.permEditSales)
+                                                        );
+
+                                                    return (
+                                                        <button
+                                                            onClick={() => canUpdatePayment && handleUpdatePayment(sale.id, sale.paymentMethod)}
+                                                            disabled={updatingPayment === sale.id || !canUpdatePayment}
+                                                            className={`transition-all ${canUpdatePayment ? 'cursor-pointer hover:scale-110 active:scale-90' : 'cursor-not-allowed opacity-70'}`}
+                                                            title={canUpdatePayment ? 'Click to update payment method' : 'No permission to update payment method'}
+                                                        >
+                                                            <span className={`badge py-1 px-3 ${sale.status === 'VOIDED' ? 'bg-red-100 text-red-800' : 'badge-info shadow-sm'} ${updatingPayment === sale.id ? 'opacity-50' : ''}`}>
+                                                                {updatingPayment === sale.id ? '...' : (sale.status === 'VOIDED' ? 'VOIDED' : sale.paymentMethod)}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="text-sm text-gray-500 whitespace-nowrap">{sale.user?.name || 'Staff'}</td>
                                             <td>
@@ -863,6 +932,17 @@ export const Sales: React.FC = () => {
                                                             ))}
                                                         </div>
 
+                                                        {sale.remarks && (
+                                                            <div className="mt-4 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800">
+                                                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                                                                    Invoice Flag
+                                                                </div>
+                                                                <div className="mt-1 text-xs text-amber-800 dark:text-amber-300 whitespace-pre-line">
+                                                                    {sale.remarks}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
                                                         {/* Payment Breakdown (Especially for SPLIT) */}
                                                         <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
                                                             <h5 className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest flex items-center gap-2">
@@ -896,7 +976,7 @@ export const Sales: React.FC = () => {
                                                         </div>
 
                                                         {/* Transaction History Timeline */}
-                                                        {((sale.exchanges || []).length > 0 || (sale.refunds || []).length > 0) && (
+                                                        {((sale.exchanges || []).length > 0 || (sale.refunds || []).length > 0 || (sale.remarks || '').split('\n').some((line: string) => line.startsWith('[UPDATE '))) && (
                                                             <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
                                                                 <h5 className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest flex items-center gap-2">
                                                                     <History className="w-3 h-3" />
@@ -921,6 +1001,25 @@ export const Sales: React.FC = () => {
                                                                             <span className="ml-auto font-black">-{formatIndianCurrency(ref.totalRefundAmount)}</span>
                                                                         </div>
                                                                     ))}
+                                                                    {(sale.remarks || '')
+                                                                        .split('\n')
+                                                                        .filter((line: string) => line.startsWith('[UPDATE '))
+                                                                        .map((line: string, i: number) => {
+                                                                            const closeBracket = line.indexOf(']');
+                                                                            const rawDate = closeBracket > 8 ? line.slice(8, closeBracket) : '';
+                                                                            const message = closeBracket >= 0 ? line.slice(closeBracket + 1).trim() : line;
+                                                                            const parsedDate = rawDate ? new Date(rawDate) : null;
+                                                                            const isValidDate = parsedDate && !Number.isNaN(parsedDate.getTime());
+
+                                                                            return (
+                                                                                <div key={`upd-${i}`} className="flex items-center gap-3 text-xs">
+                                                                                    <div className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]"></div>
+                                                                                    <span className="text-gray-500 font-medium">{isValidDate ? format(parsedDate as Date, 'dd MMM, HH:mm') : 'Updated'}:</span>
+                                                                                    <span className="font-bold text-blue-600">Invoice Updated</span>
+                                                                                    <span className="text-gray-400">({message})</span>
+                                                                                </div>
+                                                                            );
+                                                                        })}
                                                                 </div>
                                                             </div>
                                                         )}
@@ -1024,7 +1123,9 @@ export const Sales: React.FC = () => {
                         <div>
                             <p className="text-sm font-bold text-red-800 dark:text-red-400 uppercase">Refund Protocol</p>
                             <p className="text-xs text-red-700 dark:text-red-500">
-                                Select items and quantities for return. Stock will be automatically adjusted. Refund reason is mandatory for accounting logs.
+                                {isSingleReturnItem
+                                    ? 'Returned item is auto-selected for this bill. Stock will be automatically adjusted. Refund reason is mandatory for accounting logs.'
+                                    : 'Select items and quantities for return. Stock will be automatically adjusted. Refund reason is mandatory for accounting logs.'}
                             </p>
                         </div>
                     </div>
@@ -1104,7 +1205,9 @@ export const Sales: React.FC = () => {
                         <div>
                             <p className="text-sm font-bold text-orange-800 dark:text-orange-400 uppercase">Exchange Workflow</p>
                             <p className="text-xs text-orange-700 dark:text-orange-500">
-                                1. Select items being returned. 2. Select replacement items. 3. System calculates price difference.
+                                {isSingleReturnItem
+                                    ? '1. Returned item is auto-selected. 2. Select replacement items. 3. System calculates price difference.'
+                                    : '1. Select items being returned. 2. Select replacement items. 3. System calculates price difference.'}
                             </p>
                         </div>
                     </div>
@@ -1113,7 +1216,7 @@ export const Sales: React.FC = () => {
                         {/* Section A: Returns */}
                         <div className="space-y-3">
                             <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
-                                <Undo2 className="w-3 h-3" /> Step 1: Returned Items
+                                <Undo2 className="w-3 h-3" /> {isSingleReturnItem ? 'Step 1: Returned Item (Auto-Selected)' : 'Step 1: Returned Items'}
                             </h4>
                             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                                 {returnItems.map((item, idx) => (
@@ -1203,6 +1306,20 @@ export const Sales: React.FC = () => {
                                     {formatIndianCurrency(exchangeNewItems.reduce((sum, it) => sum + (it.sellingPrice * it.quantity), 0) - returnItems.reduce((sum, it) => sum + (it.sellingPrice * it.returnQty), 0))}
                                 </div>
                             </div>
+                        </div>
+                        <div className="mt-4 flex items-center justify-end gap-3">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                Replacement Payment
+                            </label>
+                            <select
+                                value={replacementPaymentMethod}
+                                onChange={(e) => setReplacementPaymentMethod(e.target.value as 'CASH' | 'CARD' | 'UPI')}
+                                className="h-9 px-3 border-2 border-gray-200 rounded-lg text-sm font-bold bg-white dark:bg-gray-800"
+                            >
+                                <option value="CASH">CASH</option>
+                                <option value="CARD">CARD</option>
+                                <option value="UPI">UPI</option>
+                            </select>
                         </div>
                     </div>
 

@@ -208,6 +208,19 @@ export const LabelDesigner: React.FC = () => {
         if (selectedId === id) setSelectedId(null);
     };
 
+    const mmScale = 4; // 1mm ~= 4px for calibration visual
+    const paperWidthMm = 110; // fixed canvas so frame never "moves"
+    const paperHeightMm = 70;
+    const anchorX = 14; // fixed print anchor (reference origin) in mm
+    const anchorY = 10;
+    const baselineGapX = 2;
+    const baselineGapY = 1;
+
+    const refX = anchorX;
+    const refY = anchorY;
+    const curX = anchorX + stickConfig.marginLeft;
+    const curY = anchorY + stickConfig.marginTop;
+
     return (
         <div className="flex flex-col gap-6">
             {/* Main Designer Area */}
@@ -407,6 +420,167 @@ export const LabelDesigner: React.FC = () => {
                         <Input label="Gap Y" type="number" value={stickConfig.gapY} onChange={e => setStickConfig({ ...stickConfig, gapY: Number(e.target.value) })} />
                         <Input label="Margin L" type="number" value={stickConfig.marginLeft} onChange={e => setStickConfig({ ...stickConfig, marginLeft: Number(e.target.value) })} />
                         <Input label="Margin T" type="number" value={stickConfig.marginTop} onChange={e => setStickConfig({ ...stickConfig, marginTop: Number(e.target.value) })} />
+                    </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <h5 className="text-xs font-black uppercase text-gray-400 mb-3 tracking-widest">Calibration Visual (Live)</h5>
+                    <p className="text-xs text-gray-500 mb-4">Gray boxes = reference (0 margin, gap 2/1). Orange boxes = your current values. Only orange should move.</p>
+                    <div className="overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 p-4">
+                        <div
+                            className="relative bg-white border border-dashed border-gray-300"
+                            style={{
+                                width: `${paperWidthMm * mmScale}px`,
+                                height: `${paperHeightMm * mmScale}px`
+                            }}
+                        >
+                            <div className="absolute left-0 top-0 text-[10px] text-gray-500 font-bold px-1 py-0.5 bg-white/90 border-b border-r border-gray-200">Fixed Paper</div>
+
+                            {/* Fixed anchor */}
+                            <div
+                                className="absolute w-2 h-2 bg-blue-600 rounded-full"
+                                style={{
+                                    left: `${anchorX * mmScale - 4}px`,
+                                    top: `${anchorY * mmScale - 4}px`
+                                }}
+                            />
+                            <div
+                                className="absolute text-[10px] font-bold text-blue-700"
+                                style={{
+                                    left: `${anchorX * mmScale + 6}px`,
+                                    top: `${anchorY * mmScale - 10}px`
+                                }}
+                            >
+                                Anchor
+                            </div>
+
+                            {/* Reference layer */}
+                            <div
+                                className="absolute border border-gray-400 bg-gray-100/40 rounded"
+                                style={{
+                                    left: `${refX * mmScale}px`,
+                                    top: `${refY * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            />
+                            <div
+                                className="absolute border border-gray-400 bg-gray-100/40 rounded"
+                                style={{
+                                    left: `${(refX + stickConfig.width + baselineGapX) * mmScale}px`,
+                                    top: `${refY * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            />
+                            <div
+                                className="absolute border border-gray-300 bg-gray-100/20 rounded"
+                                style={{
+                                    left: `${refX * mmScale}px`,
+                                    top: `${(refY + stickConfig.height + baselineGapY) * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            />
+                            <div
+                                className="absolute border border-gray-300 bg-gray-100/20 rounded"
+                                style={{
+                                    left: `${(refX + stickConfig.width + baselineGapX) * mmScale}px`,
+                                    top: `${(refY + stickConfig.height + baselineGapY) * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            />
+
+                            {/* Current layer */}
+                            <div
+                                className="absolute border-2 border-orange-500 bg-orange-50/60 rounded"
+                                style={{
+                                    left: `${curX * mmScale}px`,
+                                    top: `${curY * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            >
+                                <span className="absolute left-1 top-1 text-[10px] font-bold text-orange-700">Current</span>
+                            </div>
+                            <div
+                                className="absolute border-2 border-orange-500 bg-orange-50/60 rounded"
+                                style={{
+                                    left: `${(curX + stickConfig.width + stickConfig.gapX) * mmScale}px`,
+                                    top: `${curY * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            />
+                            <div
+                                className="absolute border-2 border-orange-300 bg-orange-50/30 rounded"
+                                style={{
+                                    left: `${curX * mmScale}px`,
+                                    top: `${(curY + stickConfig.height + stickConfig.gapY) * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            />
+                            <div
+                                className="absolute border-2 border-orange-300 bg-orange-50/30 rounded"
+                                style={{
+                                    left: `${(curX + stickConfig.width + stickConfig.gapX) * mmScale}px`,
+                                    top: `${(curY + stickConfig.height + stickConfig.gapY) * mmScale}px`,
+                                    width: `${stickConfig.width * mmScale}px`,
+                                    height: `${stickConfig.height * mmScale}px`
+                                }}
+                            />
+
+                            {/* Margin indicators */}
+                            <div
+                                className="absolute top-2 border-t-2 border-emerald-500"
+                                style={{
+                                    left: `${anchorX * mmScale}px`,
+                                    width: `${Math.abs(stickConfig.marginLeft) * mmScale}px`,
+                                    transform: stickConfig.marginLeft < 0 ? 'translateX(-100%)' : 'none'
+                                }}
+                            >
+                                <span className="absolute -top-5 left-0 text-[10px] font-bold text-emerald-700">Margin L: {stickConfig.marginLeft}mm</span>
+                            </div>
+                            <div
+                                className="absolute left-2 border-l-2 border-purple-500"
+                                style={{
+                                    top: `${anchorY * mmScale}px`,
+                                    height: `${Math.abs(stickConfig.marginTop) * mmScale}px`,
+                                    transform: stickConfig.marginTop < 0 ? 'translateY(-100%)' : 'none'
+                                }}
+                            >
+                                <span className="absolute -left-1 -top-5 text-[10px] font-bold text-purple-700">Margin T: {stickConfig.marginTop}mm</span>
+                            </div>
+                            {/* Gap indicators */}
+                            <div
+                                className="absolute border-t-2 border-rose-500"
+                                style={{
+                                    left: `${(curX + stickConfig.width) * mmScale}px`,
+                                    top: `${(curY + stickConfig.height / 2) * mmScale}px`,
+                                    width: `${Math.max(0, stickConfig.gapX) * mmScale}px`
+                                }}
+                            >
+                                <span className="absolute -top-5 left-0 text-[10px] font-bold text-rose-700">Gap X: {stickConfig.gapX}mm</span>
+                            </div>
+                            <div
+                                className="absolute border-l-2 border-cyan-500"
+                                style={{
+                                    left: `${(curX + stickConfig.width / 2) * mmScale}px`,
+                                    top: `${(curY + stickConfig.height) * mmScale}px`,
+                                    height: `${Math.max(0, stickConfig.gapY) * mmScale}px`
+                                }}
+                            >
+                                <span className="absolute -left-1 -top-5 text-[10px] font-bold text-cyan-700">Gap Y: {stickConfig.gapY}mm</span>
+                            </div>
+
+                            {/* Legend */}
+                            <div className="absolute right-2 top-2 text-[10px] bg-white/90 border border-gray-200 rounded px-2 py-1 space-y-1">
+                                <div className="flex items-center gap-1"><span className="inline-block w-3 h-2 bg-gray-200 border border-gray-400"></span> Reference</div>
+                                <div className="flex items-center gap-1"><span className="inline-block w-3 h-2 bg-orange-100 border-2 border-orange-500"></span> Current Output</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

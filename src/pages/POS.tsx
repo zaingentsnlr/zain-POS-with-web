@@ -37,6 +37,7 @@ export const POS: React.FC = () => {
     const [billDate, setBillDate] = useState(new Date().toLocaleDateString('en-CA'));
 
     const barcodeInputRef = useRef<HTMLInputElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const discountInputRef = useRef<HTMLInputElement>(null);
     const paidAmountInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,30 @@ export const POS: React.FC = () => {
         loadData();
     }, []);
 
+    // Keyboard focus shortcuts for reliable scanner/search switching.
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'F1') {
+                e.preventDefault();
+                barcodeInputRef.current?.focus();
+                barcodeInputRef.current?.select();
+            } else if (e.key === 'F3') {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+                searchInputRef.current?.select();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
+
+    // When payment panel closes, return focus to scanner.
+    useEffect(() => {
+        if (!showPayment) {
+            setTimeout(() => barcodeInputRef.current?.focus(), 50);
+        }
+    }, [showPayment]);
+
     // Debounce search input for better performance
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -72,6 +97,7 @@ export const POS: React.FC = () => {
         // Check for sale in location state (Edit/Exchange mode)
         const saleToEdit = location.state?.sale;
         if (saleToEdit) {
+            clearCart();
             setBillNo(saleToEdit.billNo);
             setCurrentSaleId(saleToEdit.id);
             setCustomerName(saleToEdit.customerName || 'Walk-in Customer');
@@ -82,7 +108,40 @@ export const POS: React.FC = () => {
             setPaidAmount(saleToEdit.paidAmount?.toString() || '');
             setDiscountAmount(saleToEdit.discount?.toString() || '');
             setOriginalPaidAmount(saleToEdit.paidAmount || 0);
+
+            // Load original invoice items into cart for true edit mode
+            (saleToEdit.items || []).forEach((item: any) => {
+                addItem({
+                    variantId: item.variantId,
+                    productName: item.productName,
+                    variantInfo: item.variantInfo || '',
+                    barcode: item.barcode || '',
+                    quantity: item.quantity,
+                    mrp: item.mrp || item.sellingPrice,
+                    sellingPrice: item.sellingPrice,
+                    discount: item.discount || 0,
+                    taxRate: item.taxRate || 0,
+                });
+            });
+
+            // Pre-fill split amounts if invoice is split-paid
+            if (saleToEdit.paymentMethod === 'SPLIT' && saleToEdit.payments?.length) {
+                setSplitAmounts({
+                    CASH: saleToEdit.payments.find((p: any) => p.paymentMode === 'CASH')?.amount || 0,
+                    UPI: saleToEdit.payments.find((p: any) => p.paymentMode === 'UPI')?.amount || 0,
+                    CARD: saleToEdit.payments.find((p: any) => p.paymentMode === 'CARD')?.amount || 0,
+                });
+            }
         } else {
+            // Fresh POS entry should never retain previous cart/session data
+            clearCart();
+            setCurrentSaleId(null);
+            setOriginalPaidAmount(0);
+            setPaidAmount('');
+            setDiscountAmount('');
+            setShowPayment(false);
+            setSplitAmounts({ CASH: 0, CARD: 0, UPI: 0 });
+            setCustomerName('Walk-in Customer');
             await loadNextBillNo();
             setBillDate(new Date().toLocaleDateString('en-CA'));
         }
@@ -221,11 +280,14 @@ export const POS: React.FC = () => {
                     taxRate: variant.product?.taxRate || 0,
                 });
                 setBarcode('');
+                setTimeout(() => barcodeInputRef.current?.focus(), 20);
             } else {
                 alert(`Product not found! Scanned: "${barcode}"`);
+                setTimeout(() => barcodeInputRef.current?.focus(), 20);
             }
         } catch (error) {
             console.error('Error adding product:', error);
+            setTimeout(() => barcodeInputRef.current?.focus(), 20);
         }
     };
 
@@ -245,6 +307,7 @@ export const POS: React.FC = () => {
             discount: 0,
             taxRate: variant.product.taxRate,
         });
+        setTimeout(() => barcodeInputRef.current?.focus(), 20);
     };
 
     const handleCheckout = () => {
@@ -360,19 +423,38 @@ export const POS: React.FC = () => {
             if (currentSaleId) {
                 // If Sale ID is present, we are in UPDATE mode
                 // Step 1: Check Permissions
-                if (user?.role !== 'ADMIN' && !(user as any)?.permChangePayment) {
-                    alert("Unauthorized: You do not have permission to change payment modes for finalized invoices.");
+                if (user?.role !== 'ADMIN' && !(user as any)?.permEditSales) {
+                    alert("Unauthorized: You do not have permission to edit finalized invoices.");
                     setProcessing(false);
                     return;
                 }
 
-                // Step 2: Prepare Payment Update Data
-                const paymentData = {
+                // Step 2: Prepare full sale update data (items + totals + payments)
+                const saleUpdateData = {
+                    customerName: customerName || 'Walk-in Customer',
+                    subtotal,
+                    discount,
+                    taxAmount: tax,
+                    cgst,
+                    sgst,
+                    grandTotal: finalTotal,
                     paymentMethod: paymentMethod === 'SPLIT' ? 'SPLIT' : paymentMethod,
                     paidAmount: paymentMethod === 'SPLIT'
                         ? Object.values(splitAmounts).reduce((a, b) => a + b, 0)
                         : paid,
                     changeAmount: change,
+                    items: items.map((item: any) => ({
+                        variantId: item.variantId,
+                        productName: item.productName,
+                        variantInfo: item.variantInfo,
+                        quantity: item.quantity,
+                        mrp: item.mrp,
+                        sellingPrice: item.sellingPrice,
+                        discount: item.discount,
+                        taxRate: item.taxRate,
+                        taxAmount: (item.sellingPrice * item.quantity * item.taxRate) / (100 + item.taxRate),
+                        total: item.sellingPrice * item.quantity - item.discount,
+                    })),
                     payments: paymentMethod === 'SPLIT'
                         ? Object.entries(splitAmounts)
                             .filter(([_, amt]) => amt > 0)
@@ -383,9 +465,9 @@ export const POS: React.FC = () => {
                         }]
                 };
 
-                const updateResult = await (window.electronAPI as any).sales.updatePayment({
+                const updateResult = await (window.electronAPI as any).sales.updateSale({
                     saleId: currentSaleId,
-                    paymentData,
+                    saleData: saleUpdateData,
                     userId: user!.id
                 });
 
@@ -394,7 +476,7 @@ export const POS: React.FC = () => {
                     if (shouldPrint) {
                         await printReceipt(sale);
                     }
-                    alert("Payment Information Updated Successfully!");
+                    alert("Sale updated successfully!");
                     setProcessing(false);
                     return;
                 } else {
@@ -518,6 +600,8 @@ export const POS: React.FC = () => {
             return name.includes(query) || barcode.includes(query) || sku.includes(query);
         });
     }, [products, debouncedSearch]);
+
+    const visibleProducts = useMemo(() => filteredProducts.slice(0, 200), [filteredProducts]);
 
     // Display helpers for Footer
     // Display helpers for Footer
@@ -863,6 +947,7 @@ export const POS: React.FC = () => {
                     <div className="w-72 bg-gray-50 dark:bg-gray-900 flex flex-col border-l border-gray-200 dark:border-gray-700 min-h-0 flex-shrink-0">
                         <div className="p-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                             <Input
+                                ref={searchInputRef}
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -873,7 +958,7 @@ export const POS: React.FC = () => {
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                            {filteredProducts.map((variant) => (
+                            {visibleProducts.map((variant) => (
                                 <button
                                     key={variant.id}
                                     onClick={() => handleProductClick(variant)}
@@ -893,6 +978,11 @@ export const POS: React.FC = () => {
                             ))}
                             {filteredProducts.length === 0 && (
                                 <div className="text-center text-gray-400 text-sm mt-10">No items found</div>
+                            )}
+                            {filteredProducts.length > visibleProducts.length && (
+                                <div className="text-center text-[11px] text-gray-400 py-2">
+                                    Showing first {visibleProducts.length} results. Type more to narrow search.
+                                </div>
                             )}
                         </div>
                     </div>
