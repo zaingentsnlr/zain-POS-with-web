@@ -1240,6 +1240,10 @@ ipcMain.handle('print:receipt', async (_event, data) => {
         });
 
         const htmlContent = typeof data === 'string' ? data : data.html;
+        const printOptions = typeof data === 'object' && data?.options ? data.options : {};
+        const deviceName = typeof printOptions.deviceName === 'string' && printOptions.deviceName.trim().length > 0
+            ? printOptions.deviceName.trim()
+            : undefined;
 
         // Strip any leading/trailing whitespace and fix malformed data URI prefix
         await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent.trim())}`);
@@ -1256,7 +1260,8 @@ ipcMain.handle('print:receipt', async (_event, data) => {
             printWindow.webContents.print({
                 silent: true,
                 printBackground: true,
-                margins: { marginType: 'none' }
+                margins: { marginType: 'none' },
+                deviceName
             }, (success, failureReason) => {
                 if (settled) return;
                 settled = true;

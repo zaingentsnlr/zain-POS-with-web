@@ -269,7 +269,30 @@ export const printService = {
                 </html>
             `;
 
-      await window.electronAPI.print.receipt({ html: finalHtml });
+      const receiptPrinterName =
+        printerConfigResult.success &&
+        printerConfigResult.data &&
+        printerConfigResult.data.value
+          ? (() => {
+              try {
+                const parsed = JSON.parse(printerConfigResult.data.value);
+                return typeof parsed?.receiptPrinter === 'string'
+                  ? parsed.receiptPrinter.trim()
+                  : undefined;
+              } catch {
+                return undefined;
+              }
+            })()
+          : undefined;
+
+      const result = await window.electronAPI.print.receipt({
+        html: finalHtml,
+        options: { deviceName: receiptPrinterName }
+      });
+
+      if (!result?.success) {
+        throw new Error(result?.error || 'Receipt print failed');
+      }
 
     } catch (error) {
       console.error('Print service error:', error);
@@ -372,14 +395,18 @@ export const printService = {
       }
 
       for (let i = 0; i < copies; i++) {
-        await window.electronAPI.print.label({
+        const labelResult = await window.electronAPI.print.label({
           html,
           options: { deviceName: labelPrinterName }
         });
+        if (!labelResult?.success) {
+          throw new Error(labelResult?.error || 'Label print failed');
+        }
         if (copies > 1) await new Promise(r => setTimeout(r, 500));
       }
     } catch (error) {
       console.error('Print label error:', error);
+      throw error;
     }
   }
 };
