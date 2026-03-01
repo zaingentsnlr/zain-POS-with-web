@@ -58,8 +58,7 @@ let saleCounterSinceLastBackup = 0;
 
 async function performAutoBackup() {
     try {
-        const dbPath = path.join(process.resourcesPath || app.getAppPath(), 'prisma', 'pos.db');
-        const actualDbPath = fs.existsSync(dbPath) ? dbPath : path.join(app.getPath('userData'), 'pos.db');
+        const actualDbPath = getDatabasePath();
 
         if (!fs.existsSync(actualDbPath)) return;
 
@@ -149,10 +148,13 @@ function getRestoreCandidates() {
     // Latest backup in userData (if still present)
     candidates.push(getUserDataLatestBackupPath());
 
-    // Bundled DB as a last resort
+    return candidates;
+}
+
+function getBundledRestoreCandidates() {
+    const candidates: string[] = [];
     candidates.push(path.join(process.resourcesPath, 'pos.db'));
 
-    // Dev convenience: allow migration backup if running from repo
     if (!app.isPackaged) {
         candidates.push(path.join(process.cwd(), 'migration', 'backup_zain_pos_2026-02-04.db'));
     }
@@ -182,7 +184,7 @@ async function restoreDatabaseFromSource(sourcePath: string, targetPath: string)
     prisma = new PrismaClient({
         datasources: {
             db: {
-                url: `file:${targetPath} `
+                url: `file:${targetPath}`
             }
         }
     });
@@ -190,6 +192,124 @@ async function restoreDatabaseFromSource(sourcePath: string, targetPath: string)
 
 async function ensureSchemaUpdated() {
     try {
+        const allTables: any[] = await prisma.$queryRawUnsafe(
+            `SELECT name FROM sqlite_master WHERE type = 'table'`
+        );
+        const tableSet = new Set((allTables || []).map((t: any) => t.name));
+        const hasTable = (name: string) => tableSet.has(name);
+
+        // Backfill tables introduced after older app versions so restored DBs remain readable.
+        if (!hasTable('InvoicePayment')) {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "InvoicePayment" (
+                    "id" TEXT NOT NULL PRIMARY KEY,
+                    "saleId" TEXT NOT NULL,
+                    "paymentMode" TEXT NOT NULL,
+                    "amount" REAL NOT NULL,
+                    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT "InvoicePayment_saleId_fkey" FOREIGN KEY ("saleId") REFERENCES "Sale" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+                )
+            `);
+        }
+
+        if (!hasTable('Exchange')) {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "Exchange" (
+                    "id" TEXT NOT NULL PRIMARY KEY,
+                    "originalInvoiceId" TEXT NOT NULL,
+                    "exchangeDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    "differenceAmount" REAL NOT NULL,
+                    "notes" TEXT,
+                    "createdBy" TEXT NOT NULL,
+                    CONSTRAINT "Exchange_originalInvoiceId_fkey" FOREIGN KEY ("originalInvoiceId") REFERENCES "Sale" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+                )
+            `);
+        }
+
+        if (!hasTable('ExchangeItem')) {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "ExchangeItem" (
+                    "id" TEXT NOT NULL PRIMARY KEY,
+                    "exchangeId" TEXT NOT NULL,
+                    "returnedItemId" TEXT,
+                    "returnedQty" INTEGER NOT NULL DEFAULT 0,
+                    "newItemId" TEXT,
+                    "newQty" INTEGER NOT NULL DEFAULT 0,
+                    "priceDiff" REAL NOT NULL,
+                    CONSTRAINT "ExchangeItem_exchangeId_fkey" FOREIGN KEY ("exchangeId") REFERENCES "Exchange" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+                )
+            `);
+        }
+
+        if (!hasTable('ExchangePayment')) {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "ExchangePayment" (
+                    "id" TEXT NOT NULL PRIMARY KEY,
+                    "exchangeId" TEXT NOT NULL,
+                    "paymentMode" TEXT NOT NULL,
+                    "amount" REAL NOT NULL,
+                    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT "ExchangePayment_exchangeId_fkey" FOREIGN KEY ("exchangeId") REFERENCES "Exchange" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+                )
+            `);
+        }
+
+        if (!hasTable('Refund')) {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "Refund" (
+                    "id" TEXT NOT NULL PRIMARY KEY,
+                    "originalInvoiceId" TEXT NOT NULL,
+                    "refundDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    "totalRefundAmount" REAL NOT NULL,
+                    "reason" TEXT NOT NULL,
+                    "createdBy" TEXT NOT NULL,
+                    CONSTRAINT "Refund_originalInvoiceId_fkey" FOREIGN KEY ("originalInvoiceId") REFERENCES "Sale" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+                )
+            `);
+        }
+
+        if (!hasTable('RefundItem')) {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "RefundItem" (
+                    "id" TEXT NOT NULL PRIMARY KEY,
+                    "refundId" TEXT NOT NULL,
+                    "variantId" TEXT NOT NULL,
+                    "quantity" INTEGER NOT NULL,
+                    "amount" REAL NOT NULL,
+                    CONSTRAINT "RefundItem_refundId_fkey" FOREIGN KEY ("refundId") REFERENCES "Refund" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+                )
+            `);
+        }
+
+        if (!hasTable('RefundPayment')) {
+            await prisma.$executeRawUnsafe(`
+                CREATE TABLE IF NOT EXISTS "RefundPayment" (
+                    "id" TEXT NOT NULL PRIMARY KEY,
+                    "refundId" TEXT NOT NULL,
+                    "paymentMode" TEXT NOT NULL,
+                    "amount" REAL NOT NULL,
+                    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT "RefundPayment_refundId_fkey" FOREIGN KEY ("refundId") REFERENCES "Refund" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+                )
+            `);
+        }
+
+        // Ensure Sale table has columns required by newer UI filters/import flags.
+        const saleTableInfo: any[] = await prisma.$queryRawUnsafe(`PRAGMA table_info("Sale")`);
+        const saleHas = (name: string) => saleTableInfo.some(col => col.name === name);
+        if (!saleHas('customerPhone')) {
+            await prisma.$executeRawUnsafe(`ALTER TABLE "Sale" ADD COLUMN customerPhone TEXT`);
+        }
+        if (!saleHas('status')) {
+            await prisma.$executeRawUnsafe(`ALTER TABLE "Sale" ADD COLUMN status TEXT DEFAULT 'COMPLETED'`);
+        }
+        if (!saleHas('isHistorical')) {
+            await prisma.$executeRawUnsafe(`ALTER TABLE "Sale" ADD COLUMN isHistorical BOOLEAN DEFAULT 0`);
+        }
+        if (!saleHas('importedFrom')) {
+            await prisma.$executeRawUnsafe(`ALTER TABLE "Sale" ADD COLUMN importedFrom TEXT`);
+        }
+
         const tableRows: any[] = await prisma.$queryRawUnsafe(
             `SELECT name FROM sqlite_master WHERE type = 'table' AND lower(name) IN('user', 'users')`
         );
@@ -271,7 +391,7 @@ async function initializePrisma() {
     prisma = new PrismaClient({
         datasources: {
             db: {
-                url: `file:${dbPath} `
+                url: `file:${dbPath}`
             }
         }
     });
@@ -284,22 +404,19 @@ async function initializePrisma() {
         console.log(`Database User Count: ${userCount} `);
 
         if (app.isPackaged) {
-            const candidates = getRestoreCandidates().filter(p => fs.existsSync(p));
+            const durableCandidates = getRestoreCandidates().filter(p => fs.existsSync(p));
+            const bundledCandidates = getBundledRestoreCandidates().filter(p => fs.existsSync(p));
+            const newerDurableCandidate = durableCandidates.find(p => shouldRestoreFrom(p, dbPath));
+            const firstRunCandidate = [...durableCandidates, ...bundledCandidates][0];
+            const sourcePath = userCount === 0 ? firstRunCandidate : newerDurableCandidate;
 
-            // Prefer restoring if a newer backup exists (e.g., after reinstall/update)
-            const newerCandidate = candidates.find(p => shouldRestoreFrom(p, dbPath));
-            const shouldRestore = userCount === 0 || Boolean(newerCandidate);
-
-            if (shouldRestore) {
-                console.log('⚠️ Attempting auto-restore from known backups...');
-                const sourcePath = newerCandidate || candidates[0];
-                if (!sourcePath) {
-                    console.warn('No restore candidates found. Cannot auto-restore.');
-                } else {
-                    console.log(`Overwriting ${dbPath} with ${sourcePath} `);
-                    await restoreDatabaseFromSource(sourcePath, dbPath);
-                    console.log('✅ Database auto-restored successfully.');
-                }
+            if (sourcePath) {
+                console.log('Attempting auto-restore from known backups...');
+                console.log(`Overwriting ${dbPath} with ${sourcePath}`);
+                await restoreDatabaseFromSource(sourcePath, dbPath);
+                console.log('Database auto-restored successfully.');
+            } else if (userCount === 0) {
+                console.warn('No restore candidates found. Cannot auto-restore.');
             }
 
             // If still empty, show a clear message
@@ -1545,6 +1662,8 @@ ipcMain.handle('products:import', async () => {
             return null;
         };
 
+        const asString = (v: any) => (v === null || v === undefined ? '' : String(v).trim());
+
         // Cache existing categories
         try {
             const categories = await prisma.category.findMany();
@@ -1656,6 +1775,8 @@ ipcMain.handle('data:importAll', async () => {
             return null;
         };
 
+        const asString = (v: any) => (v === null || v === undefined ? '' : String(v).trim());
+
         let summary = {
             products: 0,
             customers: 0,
@@ -1700,9 +1821,12 @@ ipcMain.handle('data:importAll', async () => {
                         });
                     }
 
-                    const barcode = getVal(row, ['Barcode', 'Bar Code', 'Bar_Code'])?.toString();
-                    const existingVariant = barcode
-                        ? await prisma.productVariant.findFirst({ where: { barcode } })
+                    const barcode = asString(getVal(row, ['Barcode', 'Bar Code', 'Bar_Code', 'Item Code', 'ItemCode', 'Product Code', 'Code', 'SKU']));
+                    const itemCode = asString(getVal(row, ['Item Code', 'ItemCode', 'Product Code', 'Code', 'SKU']));
+                    const finalBarcode = barcode || itemCode || `GEN-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                    const finalSku = itemCode || finalBarcode || `${productName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+                    const existingVariant = finalBarcode
+                        ? await prisma.productVariant.findFirst({ where: { barcode: finalBarcode } })
                         : null;
                     if (existingVariant) {
                         summary.skipped++;
@@ -1714,8 +1838,8 @@ ipcMain.handle('data:importAll', async () => {
                             productId: product.id,
                             size: getVal(row, ['Size'])?.toString() || 'Standard',
                             color: getVal(row, ['Color'])?.toString(),
-                            barcode: barcode || `GEN - ${Date.now()} -${Math.random().toString(36).substr(2, 5)} `,
-                            sku: `${productName.substring(0, 3).toUpperCase()} -${Date.now().toString().slice(-6)} `,
+                            barcode: finalBarcode,
+                            sku: finalSku,
                             mrp: parseFloat(getVal(row, ['MRP', 'Rate', 'Price']) || '0'),
                             sellingPrice: parseFloat(getVal(row, ['Selling Price', 'Sale Price', 'Selling_Price', 'Sale_Price', 'Price']) || '0'),
                             costPrice: parseFloat(getVal(row, ['Purchase Price', 'Purchase_Price', 'Cost']) || '0'),
@@ -1765,14 +1889,14 @@ ipcMain.handle('data:importAll', async () => {
             await ensureDefaultAdmin();
             for (const row of rows) {
                 try {
-                    const total = parseFloat(getVal(row, ['Total']) || '0');
-                    const billNo = parseInt(getVal(row, ['Bill No']) || '0');
+                    const total = parseFloat(getVal(row, ['Total', 'Grand Total', 'Net Amount', 'Amount']) || '0');
+                    const billNo = parseInt(getVal(row, ['Bill No', 'BillNo', 'Invoice No', 'InvoiceNo', 'Bill']) || '0');
                     const status = getVal(row, ['Status'])?.toString() || 'COMPLETED';
-                    const paymentMethod = getVal(row, ['Payment Mode'])?.toString() || 'CASH';
-                    const dateVal = getVal(row, ['Date']);
+                    const paymentMethod = getVal(row, ['Payment Mode', 'Payment', 'Mode'])?.toString() || 'CASH';
+                    const dateVal = getVal(row, ['Date', 'Bill Date', 'Invoice Date', 'Created At']);
                     const createdAt = dateVal ? new Date(dateVal) : new Date();
 
-                    const cashier = getVal(row, ['Cashier'])?.toString();
+                    const cashier = getVal(row, ['Cashier', 'User', 'Salesman'])?.toString();
                     const user = cashier
                         ? await prisma.user.findFirst({ where: { username: cashier } })
                         : await prisma.user.findFirst({ where: { role: 'ADMIN' } });
@@ -1816,25 +1940,29 @@ ipcMain.handle('data:importAll', async () => {
             }
         };
 
-        const productsSheet = workbook.Sheets['Products'];
-        if (productsSheet) await importProductsRows(XLSX.utils.sheet_to_json(productsSheet));
+        let processedAnySheet = false;
+        for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(sheet);
+            if (!rows.length) continue;
 
-        const customersSheet = workbook.Sheets['Customers'];
-        if (customersSheet) await importCustomersRows(XLSX.utils.sheet_to_json(customersSheet));
-
-        const salesSheet = workbook.Sheets['Sales'];
-        if (salesSheet) await importSalesRows(XLSX.utils.sheet_to_json(salesSheet));
-
-        // Fallback: if no named sheets, try the first sheet and detect type
-        if (!productsSheet && !customersSheet && !salesSheet) {
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(firstSheet);
-            const type = detectSheetType(rows as any[]);
+            const lowerName = sheetName.toLowerCase();
+            let type: 'products' | 'customers' | 'sales' | 'unknown' = 'unknown';
+            if (lowerName.includes('product') || lowerName.includes('item') || lowerName.includes('stock')) type = 'products';
+            else if (lowerName.includes('customer') || lowerName.includes('party')) type = 'customers';
+            else if (lowerName.includes('sale') || lowerName.includes('bill') || lowerName.includes('invoice')) type = 'sales';
+            else type = detectSheetType(rows as any[]);
 
             if (type === 'products') await importProductsRows(rows as any[]);
             else if (type === 'customers') await importCustomersRows(rows as any[]);
             else if (type === 'sales') await importSalesRows(rows as any[]);
             else summary.skipped += (rows as any[]).length;
+
+            processedAnySheet = true;
+        }
+
+        if (!processedAnySheet) {
+            return { success: false, error: 'No readable rows found in selected workbook.' };
         }
 
         dialog.showMessageBoxSync({
@@ -1861,13 +1989,7 @@ ipcMain.handle('db:backup', async () => {
 
         if (canceled || !filePath) return { success: false };
 
-        let sourcePath = path.join(process.cwd(), 'pos.db');
-        if (!fs.existsSync(sourcePath)) {
-            sourcePath = path.join(process.cwd(), 'prisma/pos.db');
-        }
-        if (!fs.existsSync(sourcePath)) {
-            sourcePath = path.join(process.resourcesPath, 'pos.db');
-        }
+        const sourcePath = getDatabasePath();
 
         fs.copyFileSync(sourcePath, filePath);
         return { success: true, path: filePath };
@@ -1890,6 +2012,12 @@ ipcMain.handle('db:restore', async () => {
 
         // Use the CENTRAL TRUTH for database path
         const targetPath = getDatabasePath();
+
+        // Preserve current print settings/layout to avoid label/receipt regressions after restore
+        const printSettingKeys = ['PRINTER_CONFIG', 'LABEL_LAYOUT', 'RECEIPT_LAYOUT'];
+        const preservedPrintSettings = await prisma.setting.findMany({
+            where: { key: { in: printSettingKeys } }
+        });
 
         console.log(`Resoring database from ${backupPath} to ${targetPath} `);
 
@@ -1918,6 +2046,15 @@ ipcMain.handle('db:restore', async () => {
         // Re-open and migrate schema, then report counts
         await restoreDatabaseFromSource(targetPath, targetPath);
         await ensureSchemaUpdated();
+
+        for (const setting of preservedPrintSettings) {
+            await prisma.setting.upsert({
+                where: { key: setting.key },
+                update: { value: setting.value },
+                create: { key: setting.key, value: setting.value }
+            });
+        }
+
         const userCount = await prisma.user.count();
         const productCount = await prisma.product.count();
         const saleCount = await prisma.sale.count();
