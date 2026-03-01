@@ -11,8 +11,20 @@ router.use(authMiddleware);
 router.get('/', async (req, res) => {
     try {
         const limit = parseInt(req.query.limit as string) || 50;
+        const includeSystem = (req.query.includeSystem as string) === 'true';
+
+        const where = includeSystem
+            ? {}
+            : {
+                NOT: [
+                    { action: { startsWith: 'SYNC_' } },
+                    { action: { startsWith: 'LOGIN' } },
+                    { action: { startsWith: 'LOGOUT' } }
+                ]
+            };
 
         const logs = await prisma.auditLog.findMany({
+            where,
             take: limit,
             orderBy: { createdAt: 'desc' },
             include: {

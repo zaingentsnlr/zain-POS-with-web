@@ -627,6 +627,105 @@ ipcMain.handle('backup:configure', async (_event, config) => {
 
 let syncInterval: NodeJS.Timeout | null = null;
 
+type CloudSyncCursor = { at: string; id: string };
+
+async function getCloudSyncCursor(key: string): Promise<CloudSyncCursor | null> {
+    const setting = await prisma.setting.findUnique({ where: { key } });
+    if (!setting?.value) return null;
+    try {
+        const parsed = JSON.parse(setting.value);
+        if (typeof parsed?.at === 'string' && typeof parsed?.id === 'string') {
+            return parsed as CloudSyncCursor;
+        }
+    } catch { }
+    return null;
+}
+
+async function setCloudSyncCursor(key: string, cursor: CloudSyncCursor) {
+    await prisma.setting.upsert({
+        where: { key },
+        update: { value: JSON.stringify(cursor) },
+        create: { key, value: JSON.stringify(cursor) }
+    });
+}
+
+async function syncSalesDelta(batchSize = 500) {
+    const cursorKey = 'CLOUD_SALES_CURSOR';
+    let cursor = await getCloudSyncCursor(cursorKey);
+    let totalSynced = 0;
+
+    while (true) {
+        const where: any = cursor
+            ? {
+                status: 'COMPLETED',
+                OR: [
+                    { updatedAt: { gt: new Date(cursor.at) } },
+                    { AND: [{ updatedAt: new Date(cursor.at) }, { id: { gt: cursor.id } }] }
+                ]
+            }
+            : { status: 'COMPLETED' };
+
+        const sales = await prisma.sale.findMany({
+            where,
+            include: { items: true, user: true },
+            orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+            take: batchSize
+        });
+
+        if (sales.length === 0) break;
+
+        const result = await cloudSync.syncSales(sales);
+        if (result && (result as any).success === false) {
+            throw new Error((result as any).error || 'Sales delta sync failed');
+        }
+
+        const last = sales[sales.length - 1];
+        cursor = { at: new Date(last.updatedAt).toISOString(), id: last.id };
+        await setCloudSyncCursor(cursorKey, cursor);
+        totalSynced += sales.length;
+    }
+
+    return totalSynced;
+}
+
+async function syncAuditDelta(batchSize = 500) {
+    const cursorKey = 'CLOUD_AUDIT_CURSOR';
+    let cursor = await getCloudSyncCursor(cursorKey);
+    let totalSynced = 0;
+
+    while (true) {
+        const where: any = cursor
+            ? {
+                OR: [
+                    { createdAt: { gt: new Date(cursor.at) } },
+                    { AND: [{ createdAt: new Date(cursor.at) }, { id: { gt: cursor.id } }] }
+                ]
+            }
+            : {};
+
+        const auditLogs = await prisma.auditLog.findMany({
+            where,
+            include: { user: true },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: batchSize
+        });
+
+        if (auditLogs.length === 0) break;
+
+        const result = await cloudSync.syncAuditLogs(auditLogs);
+        if (result && (result as any).success === false) {
+            throw new Error((result as any).error || 'Audit delta sync failed');
+        }
+
+        const last = auditLogs[auditLogs.length - 1];
+        cursor = { at: new Date(last.createdAt).toISOString(), id: last.id };
+        await setCloudSyncCursor(cursorKey, cursor);
+        totalSynced += auditLogs.length;
+    }
+
+    return totalSynced;
+}
+
 async function runCloudSync() {
     try {
         const setting = await prisma.setting.findUnique({ where: { key: 'CLOUD_API_URL' } });
@@ -639,23 +738,10 @@ async function runCloudSync() {
         });
         await cloudSync.syncInventory(products);
 
-        const sales = await prisma.sale.findMany({
-            where: { status: 'COMPLETED' },
-            include: { items: true, user: true },
-            orderBy: { createdAt: 'desc' },
-            take: 5000
-        });
-        await cloudSync.syncSales(sales);
+        const salesSynced = await syncSalesDelta();
+        const auditSynced = await syncAuditDelta();
 
-        // Sync Audit Logs
-        const auditLogs = await prisma.auditLog.findMany({
-            include: { user: true },
-            take: 100,
-            orderBy: { createdAt: 'desc' }
-        });
-        await cloudSync.syncAuditLogs(auditLogs);
-
-        console.log('✅ Background Cloud Sync Complete');
+        console.log(`Background Cloud Sync Complete (sales: ${salesSynced}, audit: ${auditSynced})`);
     } catch (e) {
         console.error('Background Sync Failed:', e);
     }
@@ -2254,19 +2340,15 @@ ipcMain.handle('cloud:syncNow', async () => {
         });
         await cloudSync.syncInventory(products);
 
-        // 5. Fetch recent sales (e.g., last 30 days or all)
-        const sales = await prisma.sale.findMany({
-            where: { status: 'COMPLETED' },
-            include: { items: true, user: true }, // Include User for sync
-            orderBy: { createdAt: 'desc' },
-            take: 10000 // Increased limit for full history
-        });
-        await cloudSync.syncSales(sales);
+        // 5. Sync only unsynced/new sales and audit logs (cursor-based)
+        const salesSynced = await syncSalesDelta();
+        const auditSynced = await syncAuditDelta();
 
-        return { success: true };
+        return { success: true, salesSynced, auditSynced };
     } catch (error: any) {
         console.error('Manual sync failed:', error);
         return { success: false, error: error.message };
     }
 });
+
 

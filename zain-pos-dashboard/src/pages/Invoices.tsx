@@ -52,7 +52,9 @@ export default function Invoices() {
             setTotalItems(data.pagination.total);
         } catch (error) {
             console.error('Failed to load invoices', error);
-            toast.error('Failed to load invoices');
+            if (invoices.length === 0) {
+                toast.error('Failed to load invoices');
+            }
         } finally {
             setLoading(false);
         }
