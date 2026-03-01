@@ -1645,7 +1645,20 @@ ipcMain.handle('products:import', async () => {
         if (canceled || filePaths.length === 0) return { success: false, message: 'Cancelled' };
 
         const filePath = filePaths[0];
-        const workbook = XLSX.readFile(filePath);
+        let workbook: XLSX.WorkBook;
+        try {
+            const fileBuffer = fs.readFileSync(filePath);
+            workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+        } catch (e: any) {
+            const msg = (e?.message || '').toLowerCase();
+            if (msg.includes('cannot access file') || msg.includes('eacces') || msg.includes('ebusy') || msg.includes('permission')) {
+                return {
+                    success: false,
+                    error: `Cannot access file ${filePath}. Close Excel/Preview/OneDrive lock and try again.`
+                };
+            }
+            return { success: false, error: `Failed to read Excel file: ${e?.message || 'Unknown error'}` };
+        }
         const sheetName = workbook.SheetNames[0];
         const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
@@ -1765,7 +1778,20 @@ ipcMain.handle('data:importAll', async () => {
         if (canceled || filePaths.length === 0) return { success: false, message: 'Cancelled' };
 
         const filePath = filePaths[0];
-        const workbook = XLSX.readFile(filePath);
+        let workbook: XLSX.WorkBook;
+        try {
+            const fileBuffer = fs.readFileSync(filePath);
+            workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+        } catch (e: any) {
+            const msg = (e?.message || '').toLowerCase();
+            if (msg.includes('cannot access file') || msg.includes('eacces') || msg.includes('ebusy') || msg.includes('permission')) {
+                return {
+                    success: false,
+                    error: `Cannot access file ${filePath}. Close Excel/Preview/OneDrive lock and try again.`
+                };
+            }
+            return { success: false, error: `Failed to read Excel file: ${e?.message || 'Unknown error'}` };
+        }
 
         const getVal = (row: any, keys: string[]) => {
             for (const k of keys) {
