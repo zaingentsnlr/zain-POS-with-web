@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Printer, Search, Trash2, Filter, RefreshCcw, Calendar as CalendarIcon, ChevronDown, ChevronUp, Tag, Banknote, CreditCard, QrCode } from 'lucide-react';
+import { Printer, Search, Trash2, Filter, Calendar as CalendarIcon, ChevronDown, ChevronUp, Tag, Banknote, CreditCard, QrCode } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Input } from '../components/ui/Input';
@@ -7,26 +7,28 @@ import { Modal } from '../components/ui/Modal';
 import { db } from '../lib/db';
 import { auditService } from '../services/audit.service';
 import { printService } from '../services/print.service';
-import { format, isSameDay, isSameWeek, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { format, isSameDay, isSameWeek, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, addDays, addWeeks, addMonths, addYears } from 'date-fns';
 import { formatIndianCurrency } from '../lib/format';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeftRight, History, Minus, Plus, Undo2 } from 'lucide-react';
 
-type TimePeriod = 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
+type TimePeriod = 'day' | 'week' | 'month' | 'year' | 'all';
 
 export const Sales: React.FC = () => {
     const [sales, setSales] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const [timePeriod, setTimePeriod] = useState<TimePeriod>('today');
+    const [timePeriod, setTimePeriod] = useState<TimePeriod>('day');
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [paymentFilter, setPaymentFilter] = useState<string>('all');
+    const [staffFilter, setStaffFilter] = useState<string>('all');
+    const [staffOptions, setStaffOptions] = useState<Array<{ id: string; name: string }>>([]);
     const [showFilters, setShowFilters] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [limit, setLimit] = useState(50);
-    const [hasMore, setHasMore] = useState(true);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(50);
+    const [totalRecords, setTotalRecords] = useState(0);
     const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
     const [shopSettings, setShopSettings] = useState<any>(null);
     const { user } = useAuthStore();
@@ -67,18 +69,19 @@ export const Sales: React.FC = () => {
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            loadSales(false);
-            loadShopSettings();
-        }, 300);
+            loadSales();
+        }, 250);
         return () => clearTimeout(timer);
-    }, [timePeriod, selectedDate, searchQuery, paymentFilter]);
+    }, [timePeriod, selectedDate, searchQuery, paymentFilter, staffFilter, page, pageSize]);
 
-    // Handle Load More separately
     useEffect(() => {
-        if (limit > 50) {
-            loadSales(true);
-        }
-    }, [limit]);
+        loadShopSettings();
+        loadStaffOptions();
+    }, []);
+
+    useEffect(() => {
+        setPage(1);
+    }, [timePeriod, selectedDate, searchQuery, paymentFilter, staffFilter, pageSize]);
 
     const loadShopSettings = async () => {
         try {
@@ -95,30 +98,47 @@ export const Sales: React.FC = () => {
         }
     };
 
-    const loadSales = async (isMore = false) => {
+    const loadStaffOptions = async () => {
         try {
-            if (isMore) setLoadingMore(true);
-            else setLoading(true);
+            const users = await db.users.findMany({
+                where: { isActive: true },
+                select: { id: true, name: true },
+                orderBy: { name: 'asc' }
+            });
+            setStaffOptions(users || []);
+        } catch (error) {
+            console.error('Failed to load staff options:', error);
+        }
+    };
+
+    const loadSales = async () => {
+        try {
+            setLoading(true);
 
             let where: any = {};
 
-            if (timePeriod === 'today') {
-                const start = startOfDay(new Date(selectedDate));
-                const end = endOfDay(new Date(selectedDate));
+            const baseDate = new Date(selectedDate);
+            const now = new Date();
+
+            if (timePeriod === 'day') {
+                const start = startOfDay(baseDate);
+                const end = endOfDay(baseDate);
                 where.createdAt = { gte: start.toISOString(), lte: end.toISOString() };
             } else if (timePeriod === 'week') {
-                where.createdAt = { gte: startOfWeek(new Date()).toISOString(), lte: endOfWeek(new Date()).toISOString() };
+                where.createdAt = { gte: startOfWeek(baseDate).toISOString(), lte: endOfWeek(baseDate).toISOString() };
             } else if (timePeriod === 'month') {
-                where.createdAt = { gte: startOfMonth(new Date()).toISOString(), lte: endOfMonth(new Date()).toISOString() };
-            } else if (timePeriod === 'custom') {
-                const start = startOfDay(new Date(selectedDate));
-                const end = endOfDay(new Date(selectedDate));
-                where.createdAt = { gte: start.toISOString(), lte: end.toISOString() };
+                where.createdAt = { gte: startOfMonth(baseDate).toISOString(), lte: endOfMonth(baseDate).toISOString() };
+            } else if (timePeriod === 'year') {
+                where.createdAt = { gte: startOfYear(baseDate).toISOString(), lte: endOfYear(baseDate).toISOString() };
             }
 
             // Add payment filter
             if (paymentFilter !== 'all') {
                 where.paymentMethod = paymentFilter;
+            }
+
+            if (staffFilter !== 'all') {
+                where.userId = staffFilter;
             }
 
             // Add search filter
@@ -127,11 +147,12 @@ export const Sales: React.FC = () => {
                     { billNo: { contains: searchQuery } },
                     { customerName: { contains: searchQuery } },
                     { customerPhone: { contains: searchQuery } },
-                    { items: { some: { productName: { contains: searchQuery } } } }
+                    { items: { some: { productName: { contains: searchQuery } } } },
+                    { user: { name: { contains: searchQuery } } }
                 ];
             }
 
-            const [data, totalStats] = await Promise.all([
+            const [data, totalStats, totalCount] = await Promise.all([
                 db.sales.findMany({
                     where,
                     include: {
@@ -142,32 +163,28 @@ export const Sales: React.FC = () => {
                         refunds: { include: { items: true } }
                     },
                     orderBy: { createdAt: 'desc' },
-                    take: 50,
-                    skip: isMore ? sales.length : 0,
+                    take: pageSize,
+                    skip: (page - 1) * pageSize,
                 }),
-                isMore ? Promise.resolve(null) : db.sales.aggregate({
+                db.sales.aggregate({
                     where: { ...where, status: { not: 'VOIDED' } },
                     _sum: { grandTotal: true },
+                    _count: { id: true }
+                }),
+                db.sales.aggregate({
+                    where,
                     _count: { id: true }
                 })
             ]);
 
-            if (totalStats) {
-                setTotalMatchedRevenue(totalStats._sum.grandTotal || 0);
-                setTotalMatchedBills(totalStats._count.id || 0);
-            }
-
-            if (isMore) {
-                setSales(prev => [...prev, ...data]);
-            } else {
-                setSales(data);
-            }
-            setHasMore(data.length === 50);
+            setTotalMatchedRevenue(totalStats._sum.grandTotal || 0);
+            setTotalMatchedBills(totalStats._count.id || 0);
+            setTotalRecords(totalCount._count.id || 0);
+            setSales(data);
         } catch (error) {
             console.error('Failed to load sales:', error);
         } finally {
             setLoading(false);
-            setLoadingMore(false);
         }
     };
 
@@ -512,28 +529,29 @@ export const Sales: React.FC = () => {
         }
     };
 
-    // Filter by time period
-    const getDateRange = () => {
-        const now = new Date();
-        switch (timePeriod) {
-            case 'today':
-                return { start: startOfDay(now), end: endOfDay(now) };
-            case 'week':
-                return { start: startOfWeek(now), end: endOfWeek(now) };
-            case 'month':
-                return { start: startOfMonth(now), end: endOfMonth(now) };
-            case 'year':
-                return { start: startOfYear(now), end: endOfYear(now) };
-            case 'custom':
-                const customDate = new Date(selectedDate);
-                return { start: startOfDay(customDate), end: endOfDay(customDate) };
-            case 'all':
-            default:
-                return null;
-        }
+    const shiftPeriod = (direction: -1 | 1) => {
+        const current = new Date(selectedDate);
+        let next = current;
+        if (timePeriod === 'day') next = addDays(current, direction);
+        else if (timePeriod === 'week') next = addWeeks(current, direction);
+        else if (timePeriod === 'month') next = addMonths(current, direction);
+        else if (timePeriod === 'year') next = addYears(current, direction);
+        setSelectedDate(next.toISOString().split('T')[0]);
+    };
+
+    const getRangeLabel = () => {
+        const base = new Date(selectedDate);
+        if (timePeriod === 'day') return format(base, 'dd MMM yyyy');
+        if (timePeriod === 'week') return `${format(startOfWeek(base), 'dd MMM yyyy')} - ${format(endOfWeek(base), 'dd MMM yyyy')}`;
+        if (timePeriod === 'month') return format(base, 'MMMM yyyy');
+        if (timePeriod === 'year') return format(base, 'yyyy');
+        return 'All Time';
     };
 
     const filteredSales = sales;
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const showingFrom = totalRecords === 0 ? 0 : (page - 1) * pageSize + 1;
+    const showingTo = Math.min(page * pageSize, totalRecords);
 
     // Summary display logic
     const totalRevenue = totalMatchedRevenue;
@@ -557,19 +575,18 @@ export const Sales: React.FC = () => {
                             />
                         </div>
 
-                        {/* Custom Date Picker */}
-                        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-lg px-3 py-1.5 shadow-sm">
-                            <CalendarIcon className="w-5 h-5 text-primary-500" />
-                            <input
-                                type="date"
-                                value={selectedDate}
-                                onChange={(e) => {
-                                    setSelectedDate(e.target.value);
-                                    setTimePeriod('custom');
-                                }}
-                                className="bg-transparent border-none outline-none text-sm font-medium"
-                            />
-                        </div>
+                        {timePeriod !== 'all' && (
+                            <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-lg px-3 py-1.5 shadow-sm">
+                                <CalendarIcon className="w-5 h-5 text-primary-500" />
+                                <input
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={(e) => setSelectedDate(e.target.value)}
+                                    className="bg-transparent border-none outline-none text-sm font-medium"
+                                />
+                                <span className="text-xs text-gray-500">| {getRangeLabel()}</span>
+                            </div>
+                        )}
                     </div>
                     <Button
                         variant="secondary"
@@ -583,7 +600,7 @@ export const Sales: React.FC = () => {
                 {/* Advanced Filters */}
                 {showFilters && (
                     <div className="card p-4">
-                        <div className="flex gap-4 items-center">
+                        <div className="flex flex-wrap gap-4 items-center">
                             <label className="text-sm font-medium">Payment Method:</label>
                             <select
                                 value={paymentFilter}
@@ -595,6 +612,30 @@ export const Sales: React.FC = () => {
                                 <option value="CARD">Card</option>
                                 <option value="UPI">UPI</option>
                             </select>
+                            <label className="text-sm font-medium">Staff:</label>
+                            <select
+                                value={staffFilter}
+                                onChange={(e) => setStaffFilter(e.target.value)}
+                                className="px-3 py-2 border rounded-lg bg-white dark:bg-gray-800"
+                            >
+                                <option value="all">All Staff</option>
+                                {staffOptions.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    setSearchQuery('');
+                                    setPaymentFilter('all');
+                                    setStaffFilter('all');
+                                    setSelectedDate(new Date().toISOString().split('T')[0]);
+                                    setTimePeriod('day');
+                                    setPage(1);
+                                }}
+                            >
+                                Clear Filters
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -603,56 +644,59 @@ export const Sales: React.FC = () => {
             {/* Time Period Tabs */}
             <div className="flex gap-2">
                 <button
-                    onClick={() => {
-                        setTimePeriod('today');
-                        setSelectedDate(new Date().toISOString().split('T')[0]);
-                    }}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'today' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
+                    onClick={() => setTimePeriod('day')}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'day' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
-                    Today
+                    Day
                 </button>
                 <button
-                    onClick={() => {
-                        setTimePeriod('week');
-                        setSelectedDate(new Date().toISOString().split('T')[0]);
-                    }}
+                    onClick={() => setTimePeriod('week')}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'week' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
-                    This Week
+                    Week
                 </button>
                 <button
-                    onClick={() => {
-                        setTimePeriod('month');
-                        setSelectedDate(new Date().toISOString().split('T')[0]);
-                    }}
+                    onClick={() => setTimePeriod('month')}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'month' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
-                    This Month
+                    Month
                 </button>
                 <button
-                    onClick={() => {
-                        setTimePeriod('year');
-                        setSelectedDate(new Date().toISOString().split('T')[0]);
-                    }}
+                    onClick={() => setTimePeriod('year')}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'year' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
-                    This Year
-                </button>
-                <button
-                    onClick={() => setTimePeriod('custom')}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'custom' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
-                >
-                    Selected Date
+                    Year
                 </button>
                 <button
                     onClick={() => {
                         setTimePeriod('all');
-                        setSelectedDate(new Date().toISOString().split('T')[0]);
                     }}
                     className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${timePeriod === 'all' ? 'bg-primary-600 text-white shadow-lg shadow-primary-200' : 'bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700'}`}
                 >
                     All Time
                 </button>
+                {timePeriod !== 'all' && (
+                    <>
+                        <button
+                            onClick={() => shiftPeriod(-1)}
+                            className="px-4 py-2 text-sm font-medium rounded-lg bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700"
+                        >
+                            Prev
+                        </button>
+                        <button
+                            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                            className="px-4 py-2 text-sm font-medium rounded-lg bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700"
+                        >
+                            Current
+                        </button>
+                        <button
+                            onClick={() => shiftPeriod(1)}
+                            className="px-4 py-2 text-sm font-medium rounded-lg bg-white dark:bg-gray-800 text-gray-600 hover:bg-gray-50 border border-gray-100 dark:border-gray-700"
+                        >
+                            Next
+                        </button>
+                    </>
+                )}
             </div>
 
             {/* Summary Stats */}
@@ -1059,19 +1103,38 @@ export const Sales: React.FC = () => {
                 </table>
             </div>
 
-            {(hasMore || loadingMore) && (
-                <div className="flex justify-center mt-6 mb-8">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-6 mb-8">
+                <div className="text-sm text-gray-500">
+                    Showing {showingFrom}-{showingTo} of {totalRecords} invoices
+                </div>
+                <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-500">Rows:</label>
+                    <select
+                        value={pageSize}
+                        onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                        className="px-2 py-1 border rounded-md bg-white dark:bg-gray-800 text-sm"
+                    >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                    </select>
                     <Button
                         variant="secondary"
-                        onClick={() => setLimit(prev => prev + 50)}
-                        className="flex items-center gap-3 px-8 shadow-sm hover:shadow-md transition-all active:scale-95"
-                        disabled={loadingMore}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page <= 1 || loading}
                     >
-                        <RefreshCcw className={`w-4 h-4 ${loadingMore ? 'animate-spin' : ''}`} />
-                        {loadingMore ? 'Fetching more transactions...' : 'Load Older Transactions'}
+                        Prev
+                    </Button>
+                    <span className="text-sm px-2">Page {page} of {totalPages}</span>
+                    <Button
+                        variant="secondary"
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page >= totalPages || loading}
+                    >
+                        Next
                     </Button>
                 </div>
-            )}
+            </div>
 
             {/* Void Modal */}
             <Modal

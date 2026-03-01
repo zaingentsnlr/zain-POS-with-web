@@ -542,6 +542,8 @@ app.whenReady().then(async () => {
                 syncInterval = setInterval(runCloudSync, config.intervalMinutes * 60 * 1000);
             }
         }
+        // Run one sync on startup when URL is configured so dashboard gets initial data.
+        runCloudSync().catch((e) => console.error('Initial cloud sync failed:', e));
         // ---------------------------------------------------------
 
         // Start Background Sync Worker (runs every 30 seconds)
@@ -641,7 +643,7 @@ async function runCloudSync() {
             where: { status: 'COMPLETED' },
             include: { items: true, user: true },
             orderBy: { createdAt: 'desc' },
-            take: 100
+            take: 5000
         });
         await cloudSync.syncSales(sales);
 
@@ -672,6 +674,8 @@ ipcMain.handle('cloud:configure', async (_event, { intervalMinutes }) => {
         update: { value: JSON.stringify({ intervalMinutes }) },
         create: { key: 'CLOUD_SYNC_CONFIG', value: JSON.stringify({ intervalMinutes }) }
     });
+    // Trigger one immediate sync after updating config.
+    runCloudSync().catch((e) => console.error('Immediate cloud sync failed:', e));
     return { success: true };
 });
 ipcMain.handle('db:query', async (_event, { model, method, args }) => {
@@ -755,7 +759,7 @@ ipcMain.handle('sales:checkout', async (_event, saleData) => {
     recentBills.add(saleData.billNo);
     setTimeout(() => recentBills.delete(saleData.billNo), 30000); // Clear after 30s
 
-    return await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx: any) => {
         try {
             const createdAt = saleData.createdAt ? new Date(saleData.createdAt) : new Date();
 
@@ -845,11 +849,16 @@ ipcMain.handle('sales:checkout', async (_event, saleData) => {
             throw error; // Transaction will rollback
         }
     });
+
+    if (result?.success && result?.data) {
+        cloudSync.queueSale(result.data).catch(err => console.error('Queue Error:', err));
+    }
+    return result;
 });
 
 // Update Payment for Existing Sale
 ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, userId }) => {
-    return await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx: any) => {
         try {
             // 1. Load user and sale
             const user = await tx.user.findUnique({ where: { id: userId } });
@@ -914,11 +923,16 @@ ipcMain.handle('sales:updatePayment', async (_event, { saleId, paymentData, user
             return { success: false, error: error.message };
         }
     });
+
+    if (result?.success && result?.data) {
+        cloudSync.queueSale(result.data).catch(err => console.error('Queue Error:', err));
+    }
+    return result;
 });
 
 // Update Sale (Items + Amounts + Payments) from POS Edit Screen
 ipcMain.handle('sales:updateSale', async (_event, { saleId, saleData, userId }) => {
-    return await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx: any) => {
         try {
             // 1. Verify Permission
             const user = await tx.user.findUnique({ where: { id: userId } });
@@ -1068,6 +1082,11 @@ ipcMain.handle('sales:updateSale', async (_event, { saleId, saleData, userId }) 
             return { success: false, error: error.message };
         }
     });
+
+    if (result?.success && result?.data) {
+        cloudSync.queueSale(result.data).catch(err => console.error('Queue Error:', err));
+    }
+    return result;
 });
 
 // Professional Exchange Handler
@@ -1365,33 +1384,54 @@ ipcMain.handle('print:receipt', async (_event, data) => {
         // Strip any leading/trailing whitespace and fix malformed data URI prefix
         await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent.trim())}`);
 
-        return new Promise((resolve) => {
+        const printOnce = (name?: string) => new Promise<{ success: boolean; error?: string }>((resolve) => {
             let settled = false;
             const timeout = setTimeout(() => {
                 if (settled) return;
                 settled = true;
-                try { printWindow.close(); } catch { }
                 resolve({ success: false, error: 'Print timeout: printer did not respond in time.' });
             }, 15000);
 
-            printWindow.webContents.print({
+            const options: Electron.WebContentsPrintOptions = {
                 silent: true,
                 printBackground: true,
-                margins: { marginType: 'none' },
-                deviceName
-            }, (success, failureReason) => {
+                margins: { marginType: 'none' }
+            };
+            if (name && name.trim().length > 0) {
+                options.deviceName = name.trim();
+            }
+
+            printWindow.webContents.print(options, (success, failureReason) => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
-                try { printWindow.close(); } catch { }
                 if (!success) {
-                    console.error('Print failed:', failureReason);
-                    resolve({ success: false, error: failureReason });
-                } else {
-                    resolve({ success: true });
+                    resolve({ success: false, error: failureReason || 'Receipt print failed' });
+                    return;
                 }
+                resolve({ success: true });
             });
         });
+
+        // First try configured printer (if set), then fallback to system default printer.
+        const primary = await printOnce(deviceName);
+        if (primary.success) {
+            try { printWindow.close(); } catch { }
+            return { success: true };
+        }
+
+        if (deviceName) {
+            console.warn(`Receipt print failed on configured printer "${deviceName}", retrying on default printer.`, primary.error);
+            const fallback = await printOnce(undefined);
+            try { printWindow.close(); } catch { }
+            if (fallback.success) {
+                return { success: true };
+            }
+            return { success: false, error: fallback.error || primary.error };
+        }
+
+        try { printWindow.close(); } catch { }
+        return primary;
     } catch (error: any) {
         console.error('Print:Receipt Error:', error);
         return { success: false, error: error.message };
@@ -1422,64 +1462,31 @@ ipcMain.handle('print:label', async (_event, data) => {
                 resolve({ success: false, error: 'Label print timeout: printer did not respond in time.' });
             }, 15000);
 
-            const attempts: any[] = [
-                {
-                    silent: true,
-                    printBackground: true,
-                    landscape: false,
-                    margins: { marginType: 'none' },
-                    deviceName,
-                    pageSize: customPageSize as any
-                },
-                {
-                    silent: true,
-                    printBackground: true,
-                    landscape: false,
-                    margins: { marginType: 'none' },
-                    deviceName
-                },
-                {
-                    silent: true,
-                    printBackground: true,
-                    landscape: false,
-                    margins: { marginType: 'none' }
-                }
-            ];
-
-            let attemptIndex = 0;
-            const failures: string[] = [];
-            const runAttempt = () => {
-                const current = attempts[attemptIndex];
-                const hasPageSize = !!(current as any).pageSize;
-                console.log('[Label Print] Attempt:', attemptIndex + 1, 'Device:', current.deviceName || '(default)', 'PageSize:', hasPageSize ? 'custom' : 'driver-default');
-
-                printWindow.webContents.print(current, (success, failureReason) => {
-                    if (settled) return;
-                    console.log('[Label Print] Result:', success ? 'SUCCESS' : 'FAIL', failureReason || '');
-
-                    if (success) {
-                        settled = true;
-                        clearTimeout(timeout);
-                        try { printWindow.close(); } catch { }
-                        resolve({ success: true });
-                        return;
-                    }
-
-                    failures.push(failureReason || 'unknown');
-                    attemptIndex += 1;
-                    if (attemptIndex < attempts.length) {
-                        runAttempt();
-                        return;
-                    }
-
-                    settled = true;
-                    clearTimeout(timeout);
-                    try { printWindow.close(); } catch { }
-                    resolve({ success: false, error: `All label print attempts failed: ${failures.join(' | ')}` });
-                });
+            const options: any = {
+                silent: true,
+                printBackground: true,
+                landscape: false,
+                margins: { marginType: 'none' },
+                deviceName
             };
+            if (customPageSize) options.pageSize = customPageSize as any;
 
-            runAttempt();
+            console.log('[Label Print] Single attempt. Device:', deviceName || '(default)', 'PageSize:', customPageSize ? 'custom' : 'driver-default');
+            printWindow.webContents.print(options, (success, failureReason) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                try { printWindow.close(); } catch { }
+
+                if (!success) {
+                    console.log('[Label Print] FAIL:', failureReason || '');
+                    resolve({ success: false, error: failureReason || 'Label print failed.' });
+                    return;
+                }
+
+                console.log('[Label Print] SUCCESS');
+                resolve({ success: true });
+            });
         });
     } catch (error: any) {
         console.error('Print:Label Error:', error);

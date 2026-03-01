@@ -6,6 +6,11 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 export const socket = io(API_URL, {
     autoConnect: true,
     reconnection: true,
+    query: { shopId: 'default-shop' },
+    auth: (cb) => {
+        const token = localStorage.getItem('token');
+        cb({ token });
+    },
 });
 
 socket.on('connect', () => {

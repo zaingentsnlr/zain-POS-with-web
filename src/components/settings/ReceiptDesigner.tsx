@@ -7,6 +7,7 @@ import { GripVertical, Trash2, Type, Image as ImageIcon, Layout, AlignLeft, Alig
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { db } from '../../lib/db';
+import { DEFAULT_RECEIPT_PRINTER_CONFIG, generateReceiptHtml, type ReceiptData, type ReceiptPrinterConfig } from '../../services/print.service';
 
 // --- Types ---
 
@@ -21,6 +22,9 @@ export interface ReceiptBlock {
         bold?: boolean;
         marginTop?: number;
         marginBottom?: number;
+        showVariantInfo?: boolean;
+        tableHeaderBold?: boolean;
+        tableRowBold?: boolean;
     };
     visible: boolean;
 }
@@ -32,7 +36,7 @@ const DEFAULT_LAYOUT: ReceiptBlock[] = [
     { id: '4', type: 'divider', visible: true, styles: { marginTop: 5, marginBottom: 5 } },
     { id: '5', type: 'bill_info', visible: true, styles: { fontSize: 11, bold: true } },
     { id: '6', type: 'divider', visible: true, styles: { marginTop: 5, marginBottom: 5 } },
-    { id: '7', type: 'items_table', visible: true, styles: { fontSize: 11 } },
+    { id: '7', type: 'items_table', visible: true, styles: { fontSize: 11, showVariantInfo: false, tableHeaderBold: true, tableRowBold: false } },
     { id: '8', type: 'divider', visible: true, styles: { marginTop: 5, marginBottom: 5 } },
     { id: '9', type: 'totals', visible: true, styles: { align: 'right', fontSize: 11 } },
     { id: '10', type: 'divider', visible: true, styles: { marginTop: 5, marginBottom: 5 } },
@@ -93,6 +97,8 @@ export const ReceiptDesigner: React.FC = () => {
     const [blocks, setBlocks] = useState<ReceiptBlock[]>(DEFAULT_LAYOUT);
     const [selectedBlock, setSelectedBlock] = useState<ReceiptBlock | null>(null);
     const [saving, setSaving] = useState(false);
+    const [previewHtml, setPreviewHtml] = useState('');
+    const [printerConfig, setPrinterConfig] = useState<ReceiptPrinterConfig>(DEFAULT_RECEIPT_PRINTER_CONFIG);
     const [shopDetails, setShopDetails] = useState({
         shopName: 'YOUR SHOP NAME',
         address: '123 Business Street, City',
@@ -108,7 +114,47 @@ export const ReceiptDesigner: React.FC = () => {
     useEffect(() => {
         loadLayout();
         loadShopDetails();
+        loadPrinterConfig();
     }, []);
+
+    useEffect(() => {
+        const previewData: ReceiptData = {
+            billNo: 1172,
+            date: new Date(),
+            shopName: shopDetails.shopName || 'YOUR SHOP NAME',
+            shopAddress: shopDetails.address || '',
+            shopPhone: shopDetails.phone || '',
+            gstin: shopDetails.gstin || '',
+            customerName: 'Walk-in',
+            items: [
+                { name: 'Sample Item', variantInfo: 'Size M', quantity: 1, mrp: 140, rate: 135, discount: 0, taxRate: 5, total: 135 },
+            ],
+            subtotal: 135,
+            discount: 0,
+            cgst: 3.21,
+            sgst: 3.21,
+            grandTotal: 135,
+            paymentMethod: 'CASH',
+            paidAmount: 135,
+            changeAmount: 0,
+            payments: [{ paymentMode: 'CASH', amount: 135 }],
+            userName: 'Admin',
+            logo: (shopDetails as any).logo || '',
+        };
+
+        setPreviewHtml(generateReceiptHtml(previewData, blocks, printerConfig, { interactive: true, selectedBlockId: selectedBlock?.id || undefined }));
+    }, [blocks, shopDetails, printerConfig, selectedBlock]);
+
+    useEffect(() => {
+        const onMessage = (event: MessageEvent) => {
+            const payload: any = event.data;
+            if (!payload || payload.type !== 'receipt-preview-select' || !payload.blockId) return;
+            const match = blocks.find((b) => b.id === payload.blockId);
+            if (match) setSelectedBlock(match);
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, [blocks]);
 
     const loadShopDetails = async () => {
         try {
@@ -130,6 +176,17 @@ export const ReceiptDesigner: React.FC = () => {
             }
         } catch (error) {
             console.error("Failed to load layout", error);
+        }
+    };
+
+    const loadPrinterConfig = async () => {
+        try {
+            const result = await db.settings.findUnique({ where: { key: 'PRINTER_CONFIG' } });
+            if (result && result.value) {
+                setPrinterConfig({ ...DEFAULT_RECEIPT_PRINTER_CONFIG, ...JSON.parse(result.value) });
+            }
+        } catch (error) {
+            console.error("Failed to load printer config", error);
         }
     };
 
@@ -183,7 +240,16 @@ export const ReceiptDesigner: React.FC = () => {
     const updateSelectedBlock = (updates: Partial<ReceiptBlock> | Partial<ReceiptBlock['styles']>) => {
         if (!selectedBlock) return;
         let updatedBlock;
-        if ('align' in updates || 'fontSize' in updates || 'bold' in updates || 'marginTop' in updates || 'marginBottom' in updates) {
+        if (
+            'align' in updates ||
+            'fontSize' in updates ||
+            'bold' in updates ||
+            'marginTop' in updates ||
+            'marginBottom' in updates ||
+            'showVariantInfo' in updates ||
+            'tableHeaderBold' in updates ||
+            'tableRowBold' in updates
+        ) {
             updatedBlock = { ...selectedBlock, styles: { ...selectedBlock.styles, ...updates } };
         } else {
             updatedBlock = { ...selectedBlock, ...updates };
@@ -378,24 +444,13 @@ export const ReceiptDesigner: React.FC = () => {
 
             {/* MIDDLE: Preview Canvas */}
             <div className="flex-1 bg-gray-100 dark:bg-gray-900 flex justify-center p-8 overflow-y-auto">
-                <div className="bg-white text-black shadow-lg w-[300px] min-h-[400px] p-4 flex flex-col" style={{ fontFamily: 'Courier New, monospace', fontSize: '12px', lineHeight: '1.2' }}>
-                    {blocks.map(block => (
-                        <div
-                            key={block.id}
-                            onClick={() => setSelectedBlock(block)}
-                            className={`relative hover:outline hover:outline-1 hover:outline-blue-400 cursor-pointer ${selectedBlock?.id === block.id ? 'outline outline-2 outline-blue-500' : ''} ${!block.visible ? 'opacity-30' : ''}`}
-                            style={{
-                                textAlign: block.styles.align,
-                                fontSize: block.styles.fontSize,
-                                fontWeight: block.styles.bold ? 'bold' : 'normal',
-                                marginTop: block.styles.marginTop,
-                                marginBottom: block.styles.marginBottom,
-                                display: block.visible ? 'block' : 'none'
-                            }}
-                        >
-                            {renderBlockContent(block)}
-                        </div>
-                    ))}
+                <div className="bg-white text-black shadow-lg w-[320px] min-h-[400px] overflow-hidden border border-gray-200">
+                    <iframe
+                        title="Receipt Preview"
+                        srcDoc={previewHtml}
+                        className="w-full h-[760px] border-0 bg-white"
+                        sandbox="allow-scripts"
+                    />
                 </div>
             </div>
 
@@ -415,11 +470,41 @@ export const ReceiptDesigner: React.FC = () => {
                             <label className="text-xs font-bold text-gray-500 uppercase">Type: {selectedBlock.type}</label>
                         </div>
 
-                        {(selectedBlock.type === 'text' || selectedBlock.type === 'footer' || selectedBlock.type === 'shop_title' || selectedBlock.type === 'shop_details') && (
+                        {(selectedBlock.type === 'text' || selectedBlock.type === 'header' || selectedBlock.type === 'footer' || selectedBlock.type === 'shop_title' || selectedBlock.type === 'section_shop_title' || selectedBlock.type === 'shop_details') && (
                             <div>
                                 <label className="text-xs font-bold text-gray-500 uppercase">Content</label>
                                 <textarea className="input w-full h-20 text-sm" value={selectedBlock.content} onChange={(e) => updateSelectedBlock({ content: e.target.value })} />
                                 <p className="text-[10px] text-gray-400 mt-1">Shortcodes: {"{{shopName}}"}, {"{{address}}"}, {"{{phone}}"}, {"{{gstin}}"}</p>
+                            </div>
+                        )}
+
+                        {selectedBlock.type === 'items_table' && (
+                            <div className="space-y-2 p-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                                <label className="text-xs font-bold text-gray-500 uppercase">Items Table Options</label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedBlock.styles.showVariantInfo === true}
+                                        onChange={(e) => updateSelectedBlock({ showVariantInfo: e.target.checked })}
+                                    />
+                                    <span>Show Item Size / Variant</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedBlock.styles.tableHeaderBold !== false}
+                                        onChange={(e) => updateSelectedBlock({ tableHeaderBold: e.target.checked })}
+                                    />
+                                    <span>Header Bold</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedBlock.styles.tableRowBold === true}
+                                        onChange={(e) => updateSelectedBlock({ tableRowBold: e.target.checked })}
+                                    />
+                                    <span>Item Rows Bold</span>
+                                </label>
                             </div>
                         )}
 

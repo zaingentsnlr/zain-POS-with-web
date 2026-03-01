@@ -8,14 +8,20 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
+const parseDate = (value?: string) => {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+};
+
 // Get recent sales (invoices)
 router.get('/', async (req, res) => {
     try {
         const limit = parseInt(req.query.limit as string) || 20; // Default lower limit for better performance
         const page = parseInt(req.query.page as string) || 1;
         const search = req.query.search as string;
-        const startDate = req.query.startDate as string;
-        const endDate = req.query.endDate as string;
+        const startDate = parseDate(req.query.startDate as string);
+        const endDate = parseDate(req.query.endDate as string);
         const skip = (page - 1) * limit;
 
         const where: any = {};
@@ -24,7 +30,7 @@ router.get('/', async (req, res) => {
         if (search) {
             const isBillNo = !isNaN(Number(search));
             where.OR = [
-                { customerName: { contains: search, mode: 'insensitive' } },
+                { customerName: { contains: search } },
                 { customerPhone: { contains: search } },
                 ...(isBillNo ? [{ billNo: Number(search) }] : [])
             ];
@@ -87,8 +93,8 @@ router.get('/', async (req, res) => {
 router.get('/export', async (req, res) => {
     try {
         const search = req.query.search as string;
-        const startDate = req.query.startDate as string;
-        const endDate = req.query.endDate as string;
+        const startDate = parseDate(req.query.startDate as string);
+        const endDate = parseDate(req.query.endDate as string);
         const paymentMethod = req.query.paymentMethod as string;
 
         const where: any = {};
@@ -96,7 +102,7 @@ router.get('/export', async (req, res) => {
         if (search) {
             const isBillNo = !isNaN(Number(search));
             where.OR = [
-                { customerName: { contains: search, mode: 'insensitive' } },
+                { customerName: { contains: search } },
                 { customerPhone: { contains: search } },
                 ...(isBillNo ? [{ billNo: Number(search) }] : [])
             ];

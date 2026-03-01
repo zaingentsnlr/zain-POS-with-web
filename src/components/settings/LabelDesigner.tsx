@@ -32,6 +32,18 @@ const DEFAULT_LABEL_LAYOUT: LabelBlock[] = [
     { id: '5', type: 'price', styles: { align: 'left', fontSize: 12, bold: true, marginBottom: 0 }, visible: true },
 ];
 
+const DEFAULT_STICKER_CONFIG = {
+    width: 40,
+    height: 26,
+    perRow: 2,
+    gapX: 1,
+    gapY: 0,
+    marginLeft: 6,
+    marginTop: 0,
+    contentScale: 70,
+    rowDelayMs: 1200
+};
+
 // --- Sortable Item Component ---
 const SortableBlock = ({ block, onRemove, onEdit, isSelected }: any) => {
     const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: block.id });
@@ -81,16 +93,7 @@ export const LabelDesigner: React.FC = () => {
     const [shopDetails, setShopDetails] = useState({
         shopName: 'Zain POS',
     });
-    const [stickConfig, setStickConfig] = useState({
-        width: 32,
-        height: 18,
-        perRow: 2,
-        gapX: 8,
-        gapY: 9,
-        marginLeft: 15,
-        marginTop: 20,
-        contentScale: 75
-    });
+    const [stickConfig, setStickConfig] = useState(DEFAULT_STICKER_CONFIG);
 
     const selectedBlock = blocks.find(b => b.id === selectedId) || null;
 
@@ -109,7 +112,7 @@ export const LabelDesigner: React.FC = () => {
         try {
             const res = await db.settings.findUnique({ where: { key: 'STICKER_PRINT_CONFIG' } });
             if (res && res.value) {
-                setStickConfig(JSON.parse(res.value));
+                setStickConfig({ ...DEFAULT_STICKER_CONFIG, ...JSON.parse(res.value) });
             }
         } catch (e) { console.error(e); }
     };
@@ -174,6 +177,7 @@ export const LabelDesigner: React.FC = () => {
     const handleReset = () => {
         if (confirm('Are you sure you want to reset to the default layout? All changes will be lost.')) {
             setBlocks(DEFAULT_LABEL_LAYOUT);
+            setStickConfig(DEFAULT_STICKER_CONFIG);
             setSelectedId(null);
         }
     };
@@ -420,6 +424,7 @@ export const LabelDesigner: React.FC = () => {
                         <Input label="Gap Y" type="number" value={stickConfig.gapY} onChange={e => setStickConfig({ ...stickConfig, gapY: Number(e.target.value) })} />
                         <Input label="Margin L" type="number" value={stickConfig.marginLeft} onChange={e => setStickConfig({ ...stickConfig, marginLeft: Number(e.target.value) })} />
                         <Input label="Margin T" type="number" value={stickConfig.marginTop} onChange={e => setStickConfig({ ...stickConfig, marginTop: Number(e.target.value) })} />
+                        <Input label="Row Delay (ms)" type="number" value={(stickConfig as any).rowDelayMs || 1200} onChange={e => setStickConfig({ ...stickConfig, rowDelayMs: Number(e.target.value) })} />
                     </div>
                 </div>
 

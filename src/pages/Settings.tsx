@@ -42,6 +42,9 @@ export const Settings: React.FC = () => {
         isBold: false,
         showMRP: false,
         showRate: false,
+        showItemDiscount: false,
+        showPaidLine: false,
+        showChangeLine: false,
     });
 
     const [backupConfig, setBackupConfig] = useState({
@@ -411,7 +414,7 @@ export const Settings: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="flex gap-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 max-w-2xl">
+                            <div className="flex flex-wrap gap-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700 max-w-2xl">
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                     <input type="checkbox" className="w-4 h-4 rounded text-blue-600" checked={printerSettings.showMRP} onChange={(e) => setPrinterSettings({ ...printerSettings, showMRP: e.target.checked })} />
                                     <span className="text-sm font-medium">Show MRP on Receipt</span>
@@ -419,6 +422,18 @@ export const Settings: React.FC = () => {
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                     <input type="checkbox" className="w-4 h-4 rounded text-blue-600" checked={printerSettings.showRate} onChange={(e) => setPrinterSettings({ ...printerSettings, showRate: e.target.checked })} />
                                     <span className="text-sm font-medium">Show Rate Column</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input type="checkbox" className="w-4 h-4 rounded text-blue-600" checked={printerSettings.showItemDiscount} onChange={(e) => setPrinterSettings({ ...printerSettings, showItemDiscount: e.target.checked })} />
+                                    <span className="text-sm font-medium">Show Item Discount Column</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input type="checkbox" className="w-4 h-4 rounded text-blue-600" checked={printerSettings.showPaidLine} onChange={(e) => setPrinterSettings({ ...printerSettings, showPaidLine: e.target.checked })} />
+                                    <span className="text-sm font-medium">Show Paid Line</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input type="checkbox" className="w-4 h-4 rounded text-blue-600" checked={printerSettings.showChangeLine} onChange={(e) => setPrinterSettings({ ...printerSettings, showChangeLine: e.target.checked })} />
+                                    <span className="text-sm font-medium">Show Change Line</span>
                                 </label>
                             </div>
 

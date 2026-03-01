@@ -48,7 +48,7 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
     const BARCODE_MODULE_WIDTH = 1.4;
     const BARCODE_QUIET_MARGIN = 6;
 
-    const [quantity, setQuantity] = useState(1);
+    const [quantity, setQuantity] = useState<number | ''>(1);
     const [layout, setLayout] = useState<LabelBlock[]>(DEFAULT_LABEL_LAYOUT);
     const [shopSettings, setShopSettings] = useState<any>({ shopName: 'Zain POS' });
     const [showConfig, setShowConfig] = useState(false);
@@ -62,7 +62,8 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
         gapY: 1,         // mm
         marginLeft: 2,
         marginTop: 0,
-        contentScale: 75 // Percentage
+        contentScale: 75, // Percentage
+        rowDelayMs: 1200
     });
 
 
@@ -213,9 +214,11 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
             console.error('Failed to load printer config for label print:', error);
         }
 
+        const safeQuantity = Math.max(1, Number(quantity) || 1);
         const safeMarginLeft = Math.max(0, Number(config.marginLeft) || 0);
         const safeMarginTop = Math.max(0, Number(config.marginTop) || 0);
-        const rowCount = Math.ceil(quantity / config.perRow);
+        const rowDelayMs = Math.max(300, Number((config as any).rowDelayMs) || 1200);
+        const rowCount = Math.ceil(safeQuantity / config.perRow);
         const rowPitchMm = config.height;
         const sheetWidthMm = (config.width * config.perRow) + (config.gapX * (config.perRow - 1));
         const pageWidthMm = sheetWidthMm + safeMarginLeft;
@@ -277,7 +280,7 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
 
         try {
             for (let row = 0; row < rowCount; row++) {
-                const stickersInThisRow = Math.min(config.perRow, quantity - (row * config.perRow));
+                const stickersInThisRow = Math.min(config.perRow, safeQuantity - (row * config.perRow));
                 const rowStickers = Array(stickersInThisRow).fill(null).map(() => buildStickerHtml());
                 const emptySlots = Math.max(0, config.perRow - stickersInThisRow);
                 for (let i = 0; i < emptySlots; i++) {
@@ -363,6 +366,11 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
                     alert(`Label print failed on row ${row + 1}: ${result?.error || 'Unknown error'}`);
                     return;
                 }
+
+                // Strong pacing delay prevents spooler batching/feed drift on some thermal drivers.
+                if (row < rowCount - 1) {
+                    await new Promise((resolve) => setTimeout(resolve, rowDelayMs));
+                }
             }
         } catch (error: any) {
             alert(`Label print failed: ${error?.message || error}`);
@@ -409,10 +417,25 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
                     <label className="block text-sm font-medium mb-2">Number of Stickers</label>
                     <input
                         type="number"
-                        min="1"
+                        inputMode="numeric"
                         max="100"
                         value={quantity}
-                        onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                                setQuantity('');
+                                return;
+                            }
+                            const parsed = parseInt(raw, 10);
+                            if (Number.isFinite(parsed)) {
+                                setQuantity(parsed);
+                            }
+                        }}
+                        onBlur={() => {
+                            if (quantity === '' || Number(quantity) < 1) {
+                                setQuantity(1);
+                            }
+                        }}
                         className="w-full px-3 py-2 border rounded-lg"
                     />
                 </div>
@@ -429,7 +452,7 @@ export const StickerPrintModal: React.FC<StickerPrintModalProps> = ({
                     </Button>
                     <Button onClick={handlePrint}>
                         <PrinterIcon className="w-4 h-4 mr-2" />
-                        Print {quantity} Sticker{quantity > 1 ? 's' : ''}
+                        Print {Math.max(1, Number(quantity) || 1)} Sticker{Math.max(1, Number(quantity) || 1) > 1 ? 's' : ''}
                     </Button>
                 </div>
             </div>

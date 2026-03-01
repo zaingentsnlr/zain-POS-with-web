@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Edit, Trash2, Printer, Search } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -37,6 +37,8 @@ export const Products: React.FC = () => {
     const [products, setProducts] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'itemNumber' | 'alphabetical' | 'updatedAt'>('updatedAt');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [showModal, setShowModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [showStickerModal, setShowStickerModal] = useState(false);
@@ -311,8 +313,29 @@ export const Products: React.FC = () => {
         setShowStickerModal(true);
     };
 
-    // Searching is now handled server-side in loadData for better performance
-    const filteredProducts = products;
+    // Searching is handled server-side; sorting is client-side for flexibility across related fields.
+    const filteredProducts = useMemo(() => {
+        const list = [...products];
+        const dir = sortDirection === 'asc' ? 1 : -1;
+
+        list.sort((a: any, b: any) => {
+            if (sortBy === 'alphabetical') {
+                return (a.name || '').localeCompare((b.name || ''), undefined, { sensitivity: 'base' }) * dir;
+            }
+
+            if (sortBy === 'itemNumber') {
+                const aCode = (a?.variants?.[0]?.barcode || '').toString();
+                const bCode = (b?.variants?.[0]?.barcode || '').toString();
+                return aCode.localeCompare(bCode, undefined, { numeric: true, sensitivity: 'base' }) * dir;
+            }
+
+            const aTime = new Date(a.updatedAt || 0).getTime();
+            const bTime = new Date(b.updatedAt || 0).getTime();
+            return (aTime - bTime) * dir;
+        });
+
+        return list;
+    }, [products, sortBy, sortDirection]);
 
     if (!user) return <div className="p-8 text-center text-gray-500">Authenticating...</div>;
 
@@ -334,8 +357,8 @@ export const Products: React.FC = () => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
-                <div className="flex-1 max-w-md">
+            <div className="flex flex-wrap justify-between items-center gap-3">
+                <div className="flex-1 min-w-[280px] max-w-md">
                     <div className="relative">
                         <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                         <Input
@@ -347,12 +370,33 @@ export const Products: React.FC = () => {
                         />
                     </div>
                 </div>
-                {(user?.role === 'ADMIN' || user?.permManageProducts) && (
-                    <Button variant="primary" onClick={() => setShowModal(true)}>
-                        <Plus className="w-5 h-5" />
-                        Add Product
-                    </Button>
-                )}
+                <div className="flex items-center gap-2">
+                    <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as any)}
+                        className="px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-sm"
+                        title="Sort by"
+                    >
+                        <option value="updatedAt">Updated At</option>
+                        <option value="itemNumber">Item Number</option>
+                        <option value="alphabetical">Alphabetical</option>
+                    </select>
+                    <select
+                        value={sortDirection}
+                        onChange={(e) => setSortDirection(e.target.value as any)}
+                        className="px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-sm"
+                        title="Order"
+                    >
+                        <option value="desc">Descending</option>
+                        <option value="asc">Ascending</option>
+                    </select>
+                    {(user?.role === 'ADMIN' || user?.permManageProducts) && (
+                        <Button variant="primary" onClick={() => setShowModal(true)}>
+                            <Plus className="w-5 h-5" />
+                            Add Product
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Products Table */}

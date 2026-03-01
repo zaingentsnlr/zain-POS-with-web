@@ -190,7 +190,8 @@ router.post('/sales', async (req, res) => {
             const io = getIO();
 
             // Emit batch update for realtime charts/stats
-            io.to('shop_main').emit('sale:batch', { count: sales.length, sales, timestamp: new Date() });
+            // Match default room used by socket server/client.
+            io.to('shop_default-shop').emit('sale:batch', { count: sales.length, sales, timestamp: new Date() });
 
             // Send Notifications for RECENT sales (e.g., created in last 10 minutes)
             const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);

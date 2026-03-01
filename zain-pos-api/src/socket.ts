@@ -40,6 +40,19 @@ export const initSocket = (httpServer: HttpServer) => {
         socket.join(`shop_${shopId}`);
         console.log(`Socket ${socket.id} joined shop_${shopId}`);
 
+        // Optional runtime room switching from client.
+        socket.on('join-shop', (nextShopId: string) => {
+            const safeShopId = (nextShopId || 'default-shop').toString();
+            // Leave previous shop rooms before joining the requested one.
+            for (const room of socket.rooms) {
+                if (room.startsWith('shop_')) {
+                    socket.leave(room);
+                }
+            }
+            socket.join(`shop_${safeShopId}`);
+            console.log(`Socket ${socket.id} switched to shop_${safeShopId}`);
+        });
+
         socket.on('disconnect', () => {
             console.log('Client disconnected:', socket.id);
         });
