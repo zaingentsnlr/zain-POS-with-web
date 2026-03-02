@@ -76,6 +76,10 @@
         "to": "pos.db"
       },
       {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
         "from": "prisma/generated",
         "to": "prisma-client"
       }

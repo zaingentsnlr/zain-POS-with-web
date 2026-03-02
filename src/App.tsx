@@ -26,6 +26,12 @@ const InsightsRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return allowed ? <>{children}</> : <Navigate to="/pos" replace />;
 };
 
+const PermissionRoute: React.FC<{ children: React.ReactNode; perm?: string }> = ({ children, perm }) => {
+    const user = useAuthStore((state) => state.user);
+    const allowed = !!user && (user.role === 'ADMIN' || (perm ? !!(user as any)[perm] : false));
+    return allowed ? <>{children}</> : <Navigate to="/pos" replace />;
+};
+
 function App() {
     const lastEditableRef = useRef<HTMLElement | null>(null);
 
@@ -84,16 +90,72 @@ function App() {
                         </ProtectedRoute>
                     }
                 >
-                    <Route index element={<Dashboard />} />
+                    <Route
+                        index
+                        element={
+                            <PermissionRoute perm="permViewReports">
+                                <Dashboard />
+                            </PermissionRoute>
+                        }
+                    />
                     <Route path="pos" element={<POS />} />
-                    <Route path="products" element={<Products />} />
+                    <Route
+                        path="products"
+                        element={
+                            <PermissionRoute perm="permManageProducts">
+                                <Products />
+                            </PermissionRoute>
+                        }
+                    />
                     <Route path="customers" element={<Customers />} />
-                    <Route path="sales" element={<Sales />} />
-                    <Route path="reports" element={<Reports />} />
-                    <Route path="settings" element={<Settings />} />
-                    <Route path="users" element={<Users />} />
-                    <Route path="permissions" element={<Permissions />} />
-                    <Route path="activity" element={<ActivityPage />} />
+                    <Route
+                        path="sales"
+                        element={
+                            <PermissionRoute perm="permViewSales">
+                                <Sales />
+                            </PermissionRoute>
+                        }
+                    />
+                    <Route
+                        path="reports"
+                        element={
+                            <PermissionRoute perm="permViewGstReports">
+                                <Reports />
+                            </PermissionRoute>
+                        }
+                    />
+                    <Route
+                        path="settings"
+                        element={
+                            <PermissionRoute perm="permEditSettings">
+                                <Settings />
+                            </PermissionRoute>
+                        }
+                    />
+                    <Route
+                        path="users"
+                        element={
+                            <PermissionRoute perm="permManageUsers">
+                                <Users />
+                            </PermissionRoute>
+                        }
+                    />
+                    <Route
+                        path="permissions"
+                        element={
+                            <PermissionRoute perm="permManageUsers">
+                                <Permissions />
+                            </PermissionRoute>
+                        }
+                    />
+                    <Route
+                        path="activity"
+                        element={
+                            <PermissionRoute perm="permViewReports">
+                                <ActivityPage />
+                            </PermissionRoute>
+                        }
+                    />
                     <Route
                         path="forecasting"
                         element={

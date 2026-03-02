@@ -176,6 +176,55 @@ function shouldRestoreFrom(sourcePath: string, targetPath: string) {
     return getMtimeMs(sourcePath) > getMtimeMs(targetPath);
 }
 
+function normalizeHeader(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeRowKeys(row: any) {
+    const normalized: Record<string, any> = {};
+    for (const key of Object.keys(row || {})) {
+        normalized[normalizeHeader(String(key))] = row[key];
+    }
+    return normalized;
+}
+
+function getValNormalized(row: any, keys: string[]) {
+    const normalizedRow = normalizeRowKeys(row);
+    for (const key of keys) {
+        const found = normalizedRow[normalizeHeader(key)];
+        if (found !== undefined && found !== null && String(found).trim() !== '') {
+            return found;
+        }
+    }
+    return null;
+}
+
+function parseFlexibleDate(value: any) {
+    if (value instanceof Date && !isNaN(value.getTime())) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const date = new Date(excelEpoch.getTime() + value * 86400000);
+        if (!isNaN(date.getTime())) return date;
+    }
+    const asText = (value ?? '').toString().trim();
+    if (!asText) return new Date();
+
+    const date = new Date(asText);
+    if (!isNaN(date.getTime())) return date;
+
+    // Handles dd/mm/yyyy and dd-mm-yyyy
+    const m = asText.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+        const d = Number(m[1]);
+        const mm = Number(m[2]);
+        const y = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
+        const parsed = new Date(y, mm - 1, d);
+        if (!isNaN(parsed.getTime())) return parsed;
+    }
+
+    return new Date();
+}
+
 async function restoreDatabaseFromSource(sourcePath: string, targetPath: string) {
     await prisma.$disconnect();
     await new Promise(r => setTimeout(r, 1000));
@@ -458,6 +507,9 @@ let mainWindow: BrowserWindow | null = null;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 function createWindow() {
+    const windowIcon = app.isPackaged
+        ? path.join(process.resourcesPath, 'icon.ico')
+        : path.join(process.cwd(), 'build', 'icon.ico');
     mainWindow = new BrowserWindow({
         title: "ZAIN GENTS PALACE - POS System",
         width: 1400,
@@ -472,7 +524,7 @@ function createWindow() {
             sandbox: false,
         },
         autoHideMenuBar: true,
-        icon: path.join(__dirname, '../public/icon.ico'),
+        icon: fs.existsSync(windowIcon) ? windowIcon : path.join(__dirname, '../public/icon.ico'),
     });
 
     // Add deep debugging listeners
@@ -520,6 +572,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
     try {
+        app.setAppUserModelId('com.zaingentspalace.pos');
         await initializePrisma();
 
         // Initialize Sync Service with Prisma
@@ -1760,14 +1813,6 @@ ipcMain.handle('products:import', async () => {
         let stats = { success: 0, skipped: 0, errors: 0, details: [] as string[] };
         const categoryMap = new Map<string, string>();
 
-        const getVal = (row: any, keys: string[]) => {
-            for (const k of keys) {
-                const found = Object.keys(row).find(rk => rk.toLowerCase() === k.toLowerCase());
-                if (found) return row[found];
-            }
-            return null;
-        };
-
         const asString = (v: any) => (v === null || v === undefined ? '' : String(v).trim());
 
         // Cache existing categories
@@ -1778,11 +1823,11 @@ ipcMain.handle('products:import', async () => {
 
         for (const row of rawData as any[]) {
             try {
-                const productName = getVal(row, [
+                const productName = getValNormalized(row, [
                     'Product Name', 'Item Name', 'Name', 'Product_Name', 'Item_Name', 'ITEM_NAME'
                 ]);
-                const barcode = getVal(row, ['Barcode', 'Bar Code', 'Bar_Code'])?.toString();
-                const categoryName = getVal(row, [
+                const barcode = getValNormalized(row, ['Barcode', 'Bar Code', 'Bar_Code'])?.toString();
+                const categoryName = getValNormalized(row, [
                     'Category', 'Category Name', 'Category_Name', 'Item Category', 'Item_Category', 'CATEGORY'
                 ]) || 'Uncategorized';
 
@@ -1818,8 +1863,8 @@ ipcMain.handle('products:import', async () => {
                         data: {
                             name: productName,
                             categoryId: categoryId || '',
-                            hsn: getVal(row, ['HSN Code', 'HSN', 'HSN_Code'])?.toString(),
-                            taxRate: parseFloat(getVal(row, ['GST %', 'GST', 'Tax', 'GST_Rate']) || '5')
+                            hsn: getValNormalized(row, ['HSN Code', 'HSN', 'HSN_Code'])?.toString(),
+                            taxRate: parseFloat(getValNormalized(row, ['GST %', 'GST', 'Tax', 'GST_Rate']) || '5')
                         }
                     });
                 }
@@ -1828,14 +1873,14 @@ ipcMain.handle('products:import', async () => {
                 await prisma.productVariant.create({
                     data: {
                         productId: product.id,
-                        size: getVal(row, ['Size'])?.toString() || 'Standard',
-                        color: getVal(row, ['Color'])?.toString(),
+                        size: getValNormalized(row, ['Size'])?.toString() || 'Standard',
+                        color: getValNormalized(row, ['Color'])?.toString(),
                         barcode: barcode || `GEN - ${Date.now()} -${Math.random().toString(36).substr(2, 5)} `,
                         sku: `${productName.substring(0, 3).toUpperCase()} -${Date.now().toString().slice(-6)} `,
-                        mrp: parseFloat(getVal(row, ['MRP', 'Rate', 'Price']) || '0'),
-                        sellingPrice: parseFloat(getVal(row, ['Selling Price', 'Sale Price', 'Selling_Price', 'Sale_Price', 'Price']) || '0'),
-                        costPrice: parseFloat(getVal(row, ['Purchase Price', 'Purchase_Price', 'Cost']) || '0'),
-                        stock: parseInt(getVal(row, ['Stock', 'Qty', 'Quantity', 'Stock Quantity', 'Stock_Quantity']) || '0')
+                        mrp: parseFloat(getValNormalized(row, ['MRP', 'Rate', 'Price']) || '0'),
+                        sellingPrice: parseFloat(getValNormalized(row, ['Selling Price', 'Sale Price', 'Selling_Price', 'Sale_Price', 'Price']) || '0'),
+                        costPrice: parseFloat(getValNormalized(row, ['Purchase Price', 'Purchase_Price', 'Cost']) || '0'),
+                        stock: parseInt(getValNormalized(row, ['Stock', 'Qty', 'Quantity', 'Stock Quantity', 'Stock_Quantity']) || '0')
                     }
                 });
 
@@ -1886,14 +1931,6 @@ ipcMain.handle('data:importAll', async () => {
             return { success: false, error: `Failed to read Excel file: ${e?.message || 'Unknown error'}` };
         }
 
-        const getVal = (row: any, keys: string[]) => {
-            for (const k of keys) {
-                const found = Object.keys(row).find(rk => rk.toLowerCase() === k.toLowerCase());
-                if (found) return row[found];
-            }
-            return null;
-        };
-
         const asString = (v: any) => (v === null || v === undefined ? '' : String(v).trim());
 
         let summary = {
@@ -1906,7 +1943,7 @@ ipcMain.handle('data:importAll', async () => {
 
         const detectSheetType = (rows: any[]) => {
             if (rows.length === 0) return 'unknown';
-            const keys = Object.keys(rows[0]).map(k => k.toLowerCase());
+            const keys = Object.keys(normalizeRowKeys(rows[0] || {}));
             if (keys.some(k => k.includes('bill') || k.includes('payment') || k.includes('cashier'))) return 'sales';
             if (keys.some(k => k.includes('customer') || k.includes('gstin'))) return 'customers';
             if (keys.some(k => k.includes('product') || k.includes('barcode') || k.includes('mrp'))) return 'products';
@@ -1916,34 +1953,34 @@ ipcMain.handle('data:importAll', async () => {
         const importProductsRows = async (rows: any[]) => {
             for (const row of rows) {
                 try {
-                    const productName = getVal(row, ['Product Name', 'Item Name', 'Name', 'Product_Name', 'Item_Name']);
-                    if (!productName) {
+                    const safeProductName = getValNormalized(row, ['Product Name', 'Item Name', 'Name', 'Product_Name', 'Item_Name']);
+                    if (!safeProductName) {
                         summary.skipped++;
                         continue;
                     }
 
-                    const categoryName = getVal(row, ['Category', 'Category Name', 'Category_Name']) || 'Uncategorized';
+                    const categoryName = getValNormalized(row, ['Category', 'Category Name', 'Category_Name']) || 'Uncategorized';
                     let category = await prisma.category.findFirst({ where: { name: categoryName } });
                     if (!category) {
                         category = await prisma.category.create({ data: { name: categoryName } });
                     }
 
-                    let product = await prisma.product.findFirst({ where: { name: productName } });
+                    let product = await prisma.product.findFirst({ where: { name: safeProductName } });
                     if (!product) {
                         product = await prisma.product.create({
                             data: {
-                                name: productName,
+                                name: safeProductName,
                                 categoryId: category.id,
-                                hsn: getVal(row, ['HSN', 'HSN Code', 'HSN_Code'])?.toString(),
-                                taxRate: parseFloat(getVal(row, ['Tax %', 'GST %', 'GST', 'GST_Rate']) || '5')
+                                hsn: getValNormalized(row, ['HSN', 'HSN Code', 'HSN_Code'])?.toString(),
+                                taxRate: parseFloat(getValNormalized(row, ['Tax %', 'GST %', 'GST', 'GST_Rate']) || '5')
                             }
                         });
                     }
 
-                    const barcode = asString(getVal(row, ['Barcode', 'Bar Code', 'Bar_Code', 'Item Code', 'ItemCode', 'Product Code', 'Code', 'SKU']));
-                    const itemCode = asString(getVal(row, ['Item Code', 'ItemCode', 'Product Code', 'Code', 'SKU']));
+                    const barcode = asString(getValNormalized(row, ['Barcode', 'Bar Code', 'Bar_Code', 'Item Code', 'ItemCode', 'Product Code', 'Code', 'SKU']));
+                    const itemCode = asString(getValNormalized(row, ['Item Code', 'ItemCode', 'Product Code', 'Code', 'SKU']));
                     const finalBarcode = barcode || itemCode || `GEN-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                    const finalSku = itemCode || finalBarcode || `${productName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
+                    const finalSku = itemCode || finalBarcode || `${safeProductName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-6)}`;
                     const existingVariant = finalBarcode
                         ? await prisma.productVariant.findFirst({ where: { barcode: finalBarcode } })
                         : null;
@@ -1955,14 +1992,14 @@ ipcMain.handle('data:importAll', async () => {
                     await prisma.productVariant.create({
                         data: {
                             productId: product.id,
-                            size: getVal(row, ['Size'])?.toString() || 'Standard',
-                            color: getVal(row, ['Color'])?.toString(),
+                            size: getValNormalized(row, ['Size'])?.toString() || 'Standard',
+                            color: getValNormalized(row, ['Color'])?.toString(),
                             barcode: finalBarcode,
                             sku: finalSku,
-                            mrp: parseFloat(getVal(row, ['MRP', 'Rate', 'Price']) || '0'),
-                            sellingPrice: parseFloat(getVal(row, ['Selling Price', 'Sale Price', 'Selling_Price', 'Sale_Price', 'Price']) || '0'),
-                            costPrice: parseFloat(getVal(row, ['Purchase Price', 'Purchase_Price', 'Cost']) || '0'),
-                            stock: parseInt(getVal(row, ['Stock', 'Qty', 'Quantity', 'Stock Quantity', 'Stock_Quantity']) || '0')
+                            mrp: parseFloat(getValNormalized(row, ['MRP', 'Rate', 'Price']) || '0'),
+                            sellingPrice: parseFloat(getValNormalized(row, ['Selling Price', 'Sale Price', 'Selling_Price', 'Sale_Price', 'Price']) || '0'),
+                            costPrice: parseFloat(getValNormalized(row, ['Purchase Price', 'Purchase_Price', 'Cost']) || '0'),
+                            stock: parseInt(getValNormalized(row, ['Stock', 'Qty', 'Quantity', 'Stock Quantity', 'Stock_Quantity']) || '0')
                         }
                     });
 
@@ -1976,15 +2013,15 @@ ipcMain.handle('data:importAll', async () => {
         const importCustomersRows = async (rows: any[]) => {
             for (const row of rows) {
                 try {
-                    const name = getVal(row, ['Customer Name', 'Name']);
+                    const name = getValNormalized(row, ['Customer Name', 'Name']);
                     if (!name) {
                         summary.skipped++;
                         continue;
                     }
-                    const phone = getVal(row, ['Phone', 'Mobile', 'Phone No'])?.toString();
-                    const email = getVal(row, ['Email'])?.toString();
-                    const address = getVal(row, ['Address'])?.toString();
-                    const gstin = getVal(row, ['GSTIN', 'GSTIN No'])?.toString();
+                    const phone = getValNormalized(row, ['Phone', 'Mobile', 'Phone No'])?.toString();
+                    const email = getValNormalized(row, ['Email'])?.toString();
+                    const address = getValNormalized(row, ['Address'])?.toString();
+                    const gstin = getValNormalized(row, ['GSTIN', 'GSTIN No'])?.toString();
 
                     if (phone) {
                         await prisma.customer.upsert({
@@ -2008,14 +2045,15 @@ ipcMain.handle('data:importAll', async () => {
             await ensureDefaultAdmin();
             for (const row of rows) {
                 try {
-                    const total = parseFloat(getVal(row, ['Total', 'Grand Total', 'Net Amount', 'Amount']) || '0');
-                    const billNo = parseInt(getVal(row, ['Bill No', 'BillNo', 'Invoice No', 'InvoiceNo', 'Bill']) || '0');
-                    const status = getVal(row, ['Status'])?.toString() || 'COMPLETED';
-                    const paymentMethod = getVal(row, ['Payment Mode', 'Payment', 'Mode'])?.toString() || 'CASH';
-                    const dateVal = getVal(row, ['Date', 'Bill Date', 'Invoice Date', 'Created At']);
-                    const createdAt = dateVal ? new Date(dateVal) : new Date();
+                    const total = parseFloat(getValNormalized(row, ['Total', 'Grand Total', 'Net Amount', 'Amount']) || '0');
+                    const billRaw = getValNormalized(row, ['Bill No', 'BillNo', 'Invoice No', 'InvoiceNo', 'Bill']);
+                    const billNo = parseInt(String(billRaw || '0').replace(/[^\d]/g, ''), 10) || 0;
+                    const status = getValNormalized(row, ['Status'])?.toString() || 'COMPLETED';
+                    const paymentMethod = getValNormalized(row, ['Payment Mode', 'Payment', 'Mode'])?.toString() || 'CASH';
+                    const dateVal = getValNormalized(row, ['Date', 'Bill Date', 'Invoice Date', 'Created At']);
+                    const createdAt = parseFlexibleDate(dateVal);
 
-                    const cashier = getVal(row, ['Cashier', 'User', 'Salesman'])?.toString();
+                    const cashier = getValNormalized(row, ['Cashier', 'User', 'Salesman'])?.toString();
                     const user = cashier
                         ? await prisma.user.findFirst({ where: { username: cashier } })
                         : await prisma.user.findFirst({ where: { role: 'ADMIN' } });
@@ -2033,8 +2071,8 @@ ipcMain.handle('data:importAll', async () => {
                         data: {
                             billNo: billNo > 0 ? billNo : Date.now(),
                             userId,
-                            customerName: getVal(row, ['Customer'])?.toString() || null,
-                            customerPhone: getVal(row, ['Phone'])?.toString() || null,
+                            customerName: getValNormalized(row, ['Customer'])?.toString() || null,
+                            customerPhone: getValNormalized(row, ['Phone'])?.toString() || null,
                             subtotal: total,
                             discount: 0,
                             discountPercent: 0,
@@ -2062,7 +2100,7 @@ ipcMain.handle('data:importAll', async () => {
         let processedAnySheet = false;
         for (const sheetName of workbook.SheetNames) {
             const sheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(sheet);
+            const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
             if (!rows.length) continue;
 
             const lowerName = sheetName.toLowerCase();
@@ -2177,6 +2215,14 @@ ipcMain.handle('db:restore', async () => {
         const userCount = await prisma.user.count();
         const productCount = await prisma.product.count();
         const saleCount = await prisma.sale.count();
+
+        if (productCount === 0 && saleCount === 0) {
+            dialog.showMessageBoxSync({
+                type: 'warning',
+                title: 'Restore Warning',
+                message: 'Restore completed, but no products/sales were found in this backup. The selected DB may be incompatible with this app version.'
+            });
+        }
 
         dialog.showMessageBoxSync({
             type: 'info',
