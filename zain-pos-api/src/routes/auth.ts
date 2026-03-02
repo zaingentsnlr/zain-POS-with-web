@@ -22,8 +22,23 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        // Verify password
-        const isValidPassword = await bcrypt.compare(password, user.password);
+        // Verify password:
+        // 1) normal bcrypt hash
+        // 2) legacy/plain password fallback (from old sync payloads), then auto-upgrade to bcrypt
+        let isValidPassword = false;
+        try {
+            isValidPassword = await bcrypt.compare(password, user.password);
+        } catch {
+            isValidPassword = false;
+        }
+        if (!isValidPassword && user.password === password) {
+            isValidPassword = true;
+            const upgradedHash = await bcrypt.hash(password, 10);
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { password: upgradedHash }
+            });
+        }
         if (!isValidPassword) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
