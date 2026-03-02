@@ -155,6 +155,18 @@ class CloudSyncService {
         }
     }
 
+    async setDashboardUser(payload: { username: string; password: string; name?: string; role?: string }) {
+        if (!this.apiUrl) return;
+        try {
+            await axios.post(`${this.apiUrl}/api/sync/dashboard-user`, payload, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    }
+
     async syncAuditLogs(logs: any[]) {
         if (!this.apiUrl) return;
         try {

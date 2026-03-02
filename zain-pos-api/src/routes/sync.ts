@@ -1,5 +1,6 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -264,44 +265,106 @@ router.post('/users', async (req, res) => {
         const { users } = req.body;
         if (!Array.isArray(users)) return res.status(400).json({ error: 'Invalid data' });
 
-        console.log(`📡 Cloud receiving ${users.length} users...`);
+        console.log(`Cloud receiving ${users.length} users...`);
 
+        let synced = 0;
+        const skipped: string[] = [];
         for (const user of users) {
+            const username = (user?.username || '').toString().trim();
+            if (!username) {
+                skipped.push('missing_username');
+                continue;
+            }
+
+            const rawPassword = typeof user?.password === 'string' ? user.password : '';
+            if (!rawPassword) {
+                skipped.push(username);
+                continue;
+            }
+
+            const isBcrypt = rawPassword.startsWith('$2a$') || rawPassword.startsWith('$2b$') || rawPassword.startsWith('$2y$');
+            const passwordToStore = isBcrypt ? rawPassword : await bcrypt.hash(rawPassword, 10);
+
             await prisma.user.upsert({
-                where: { username: user.username },
+                where: { username },
                 update: {
-                    name: user.name,
-                    role: user.role,
-                    password: user.password, // Syncing hashed password
-                    isActive: user.isActive
+                    name: user.name || username,
+                    role: user.role || 'CASHIER',
+                    password: passwordToStore,
+                    isActive: user.isActive !== false
                 },
                 create: {
-                    username: user.username,
-                    name: user.name,
-                    role: user.role,
-                    password: user.password,
-                    isActive: user.isActive
+                    username,
+                    name: user.name || username,
+                    role: user.role || 'CASHIER',
+                    password: passwordToStore,
+                    isActive: user.isActive !== false
                 }
             });
+            synced++;
         }
-        console.log('✅ Users synced.');
+        console.log(`Users synced: ${synced}/${users.length}`);
 
         // Log the sync
         await prisma.auditLog.create({
             data: {
                 action: 'SYNC_USERS',
-                details: `Synced ${users.length} users from desktop`,
+                details: `Synced ${synced}/${users.length} users from desktop${skipped.length ? `, skipped: ${skipped.join(', ')}` : ''}`,
                 userId: null
             }
         });
 
-        res.json({ success: true });
-    } catch (error) {
+        res.json({ success: true, synced, total: users.length, skipped });
+    } catch (error: any) {
         console.error('User Sync Error:', error);
-        res.status(500).json({ error: 'Sync failed' });
+        res.status(500).json({ error: error?.message || 'Sync failed' });
     }
 });
 
+// Set/reset one dedicated dashboard login from POS
+router.post('/dashboard-user', async (req, res) => {
+    try {
+        const username = (req.body?.username || '').toString().trim();
+        const password = (req.body?.password || '').toString();
+        const name = (req.body?.name || username || 'Dashboard Admin').toString().trim();
+        const role = (req.body?.role || 'ADMIN').toString().toUpperCase();
+
+        if (!username || !password) {
+            return res.status(400).json({ error: 'username and password are required' });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        const user = await prisma.user.upsert({
+            where: { username },
+            update: {
+                name,
+                role: role === 'ADMIN' ? 'ADMIN' : 'CASHIER',
+                password: passwordHash,
+                isActive: true
+            },
+            create: {
+                username,
+                name,
+                role: role === 'ADMIN' ? 'ADMIN' : 'CASHIER',
+                password: passwordHash,
+                isActive: true
+            }
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                action: 'DASHBOARD_USER_SET',
+                details: `Dashboard credentials set for ${username}`,
+                userId: user.id
+            }
+        });
+
+        res.json({ success: true, username: user.username });
+    } catch (error: any) {
+        console.error('Dashboard user set error:', error);
+        res.status(500).json({ error: error?.message || 'Failed to set dashboard user' });
+    }
+});
 // Sync Inventory from Desktop
 router.post('/inventory', async (req, res) => {
     try {
@@ -520,3 +583,4 @@ router.post('/audit', async (req, res) => {
 });
 
 export default router;
+
