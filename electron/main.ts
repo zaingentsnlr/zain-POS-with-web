@@ -51,6 +51,7 @@ try {
 }
 
 let prisma: any; // Type as any to avoid TS errors with dynamic require
+let dbBootstrappedFromResource = false;
 
 // --- System Safety ---
 const recentBills = new Set<string>();
@@ -113,6 +114,7 @@ function getDatabasePath() {
             try {
                 console.log('Copying database from resources:', resourcePath);
                 fs.copyFileSync(resourcePath, dbPath);
+                dbBootstrappedFromResource = true;
                 console.log('Database copied successfully.');
             } catch (err) {
                 console.error('Failed to copy database from resources:', err);
@@ -424,6 +426,25 @@ async function ensureDefaultAdmin() {
     });
 }
 
+async function clearBundledDataForFreshInstall() {
+    try {
+        console.log('Fresh install from bundled DB detected. Clearing bundled shop data...');
+        await prisma.saleItem.deleteMany({});
+        await prisma.sale.deleteMany({});
+        await prisma.inventoryMovement.deleteMany({});
+        await prisma.auditLog.deleteMany({});
+        await prisma.productVariant.deleteMany({});
+        await prisma.product.deleteMany({});
+        await prisma.customer.deleteMany({});
+        await prisma.category.deleteMany({});
+        await prisma.user.deleteMany({});
+        await ensureDefaultAdmin();
+        console.log('Bundled shop data cleared.');
+    } catch (e) {
+        console.error('Bundled data cleanup failed:', e);
+    }
+}
+
 async function initializePrisma() {
     let dbPath = getDatabasePath();
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -466,6 +487,11 @@ async function initializePrisma() {
                 console.log('Database auto-restored successfully.');
             } else if (userCount === 0) {
                 console.warn('No restore candidates found. Cannot auto-restore.');
+            }
+
+            // New install copied from bundled DB with no real backup: clear bundled sample/shop data.
+            if (dbBootstrappedFromResource && durableCandidates.length === 0) {
+                await clearBundledDataForFreshInstall();
             }
 
             // If still empty, show a clear message
