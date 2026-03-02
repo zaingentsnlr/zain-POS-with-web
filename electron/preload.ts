@@ -9,8 +9,6 @@ const api = {
         restore: () => ipcRenderer.invoke('db:restore'),
         configureBackup: (config: any) => ipcRenderer.invoke('backup:configure', config),
         syncNow: () => ipcRenderer.invoke('cloud:syncNow'),
-        syncUsersNow: () => ipcRenderer.invoke('cloud:syncUsers'),
-        setDashboardUser: (payload: { username: string; password: string; name?: string; role?: string }) => ipcRenderer.invoke('cloud:setDashboardUser', payload),
         configureSync: (config: { intervalMinutes: number }) => ipcRenderer.invoke('cloud:configure', config),
     },
 

@@ -1,6 +1,7 @@
 
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -51,6 +52,68 @@ router.post('/reset', async (req, res) => {
     } catch (error: any) {
         console.error('Data reset failed:', error);
         res.status(500).json({ error: 'Reset failed', details: error.message });
+    }
+});
+
+// RESET/CREATE WEB DASHBOARD LOGIN USER
+router.post('/reset-dashboard-login', async (req, res) => {
+    try {
+        const { secret, username, password, name, role } = req.body;
+
+        if (secret !== MAINTENANCE_SECRET) {
+            return res.status(403).json({ error: 'Unauthorized: Invalid maintenance secret' });
+        }
+
+        const finalUsername = (username || 'admin').toString().trim();
+        const finalPassword = (password || '').toString();
+        const finalName = (name || 'Dashboard Admin').toString().trim();
+        const finalRole = (role || 'ADMIN').toString().toUpperCase() === 'ADMIN' ? 'ADMIN' : 'CASHIER';
+
+        if (!finalUsername || !finalPassword) {
+            return res.status(400).json({ error: 'username and password are required' });
+        }
+
+        const passwordHash = await bcrypt.hash(finalPassword, 10);
+        const existingUser = await prisma.user.findFirst({
+            where: { username: finalUsername }
+        });
+
+        const user = existingUser
+            ? await prisma.user.update({
+                where: { id: existingUser.id },
+                data: {
+                    password: passwordHash,
+                    name: finalName,
+                    role: finalRole,
+                    isActive: true
+                }
+            })
+            : await prisma.user.create({
+                data: {
+                    username: finalUsername,
+                    password: passwordHash,
+                    name: finalName,
+                    role: finalRole,
+                    isActive: true
+                }
+            });
+
+        await prisma.auditLog.create({
+            data: {
+                action: 'DASHBOARD_LOGIN_RESET',
+                details: `Dashboard login reset for ${user.username} via maintenance endpoint`,
+                userId: user.id
+            }
+        });
+
+        return res.json({
+            success: true,
+            message: 'Dashboard login reset successfully',
+            user: { username: user.username, role: user.role, isActive: user.isActive }
+        });
+    } catch (error: any) {
+        console.error('Reset dashboard login failed:', error);
+        return res.status(500).json({ error: 'Failed to reset dashboard login', details: error.message });
     }
 });
 

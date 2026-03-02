@@ -12,9 +12,7 @@ import {
     Database,
     Package,
     Globe,
-    Info,
-    Eye,
-    EyeOff
+    Info
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -58,12 +56,6 @@ export const Settings: React.FC = () => {
         apiUrl: '',
         intervalMinutes: 0
     });
-    const [dashboardLogin, setDashboardLogin] = useState({
-        username: 'admin',
-        password: '',
-        name: 'Dashboard Admin'
-    });
-    const [showDashboardPassword, setShowDashboardPassword] = useState(false);
 
     const [syncing, setSyncing] = useState(false);
 
@@ -337,83 +329,6 @@ export const Settings: React.FC = () => {
                                             <RefreshCw className="w-4 h-4" />
                                             Sync Now (Manual)
                                         </Button>
-                                        <Button
-                                            variant="outline"
-                                            onClick={async () => {
-                                                const res = await (window.electronAPI as any).db.syncUsersNow();
-                                                if (res?.success) {
-                                                    alert(`Dashboard users synced (${res.count || 0}). You can now login on web dashboard with POS usernames/passwords.`);
-                                                } else {
-                                                    alert('User sync failed: ' + (res?.error || 'Unknown error'));
-                                                }
-                                            }}
-                                            className="w-full"
-                                        >
-                                            <RefreshCw className="w-4 h-4" />
-                                            Sync Dashboard Users
-                                        </Button>
-                                        <p className="text-xs text-gray-500">
-                                            Dashboard login uses cloud users. Change password in POS User Management, then click <b>Sync Dashboard Users</b>.
-                                        </p>
-                                        <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-3">
-                                            <p className="text-sm font-semibold">Dashboard Login Manager</p>
-                                            <Input
-                                                label="Dashboard Username"
-                                                value={dashboardLogin.username}
-                                                onChange={(e) => setDashboardLogin({ ...dashboardLogin, username: e.target.value })}
-                                            />
-                                            <Input
-                                                label="Dashboard Display Name"
-                                                value={dashboardLogin.name}
-                                                onChange={(e) => setDashboardLogin({ ...dashboardLogin, name: e.target.value })}
-                                            />
-                                            <div>
-                                                <label className="label">Dashboard Password</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type={showDashboardPassword ? 'text' : 'password'}
-                                                        value={dashboardLogin.password}
-                                                        onChange={(e) => setDashboardLogin({ ...dashboardLogin, password: e.target.value })}
-                                                        className="input pr-10"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowDashboardPassword(prev => !prev)}
-                                                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
-                                                        aria-label={showDashboardPassword ? 'Hide password' : 'Show password'}
-                                                    >
-                                                        {showDashboardPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <Button
-                                                variant="primary"
-                                                onClick={async () => {
-                                                    if (!dashboardLogin.username.trim() || !dashboardLogin.password.trim()) {
-                                                        alert('Please enter dashboard username and password.');
-                                                        return;
-                                                    }
-                                                    const res = await (window.electronAPI as any).db.setDashboardUser({
-                                                        username: dashboardLogin.username.trim(),
-                                                        password: dashboardLogin.password,
-                                                        name: dashboardLogin.name?.trim() || dashboardLogin.username.trim(),
-                                                        role: 'ADMIN'
-                                                    });
-                                                    if (res?.success) {
-                                                        alert('Dashboard login saved/reset successfully.');
-                                                        setDashboardLogin({ ...dashboardLogin, password: '' });
-                                                    } else {
-                                                        alert('Failed to save dashboard login: ' + (res?.error || 'Unknown error'));
-                                                    }
-                                                }}
-                                                className="w-full"
-                                            >
-                                                Save/Reset Dashboard Login
-                                            </Button>
-                                            <p className="text-xs text-gray-500">
-                                                This creates/updates a web dashboard user directly in cloud, even if full sync fails.
-                                            </p>
-                                        </div>
                                     </div>
                                 </div>
 
