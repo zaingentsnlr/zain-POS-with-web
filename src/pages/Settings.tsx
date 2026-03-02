@@ -12,7 +12,9 @@ import {
     Database,
     Package,
     Globe,
-    Info
+    Info,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -61,6 +63,7 @@ export const Settings: React.FC = () => {
         password: '',
         name: 'Dashboard Admin'
     });
+    const [showDashboardPassword, setShowDashboardPassword] = useState(false);
 
     const [syncing, setSyncing] = useState(false);
 
@@ -364,12 +367,25 @@ export const Settings: React.FC = () => {
                                                 value={dashboardLogin.name}
                                                 onChange={(e) => setDashboardLogin({ ...dashboardLogin, name: e.target.value })}
                                             />
-                                            <Input
-                                                label="Dashboard Password"
-                                                type="password"
-                                                value={dashboardLogin.password}
-                                                onChange={(e) => setDashboardLogin({ ...dashboardLogin, password: e.target.value })}
-                                            />
+                                            <div>
+                                                <label className="label">Dashboard Password</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type={showDashboardPassword ? 'text' : 'password'}
+                                                        value={dashboardLogin.password}
+                                                        onChange={(e) => setDashboardLogin({ ...dashboardLogin, password: e.target.value })}
+                                                        className="input pr-10"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowDashboardPassword(prev => !prev)}
+                                                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-gray-700"
+                                                        aria-label={showDashboardPassword ? 'Hide password' : 'Show password'}
+                                                    >
+                                                        {showDashboardPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                                    </button>
+                                                </div>
+                                            </div>
                                             <Button
                                                 variant="primary"
                                                 onClick={async () => {

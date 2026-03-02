@@ -94,22 +94,31 @@ router.post('/sales', async (req, res) => {
             if (sale.user) {
                 try {
                     // Start by trying to ensure the user exists with the SAME ID as desktop
-                    const syncedUser = await prisma.user.upsert({
-                        where: { username: sale.user.username },
-                        update: {
-                            name: sale.user.name,
-                            role: sale.user.role,
-                            isActive: sale.user.isActive
-                        },
-                        create: {
-                            id: sale.user.id, // Try to force ID
-                            username: sale.user.username,
-                            password: sale.user.password,
-                            name: sale.user.name,
-                            role: sale.user.role,
-                            isActive: sale.user.isActive
-                        }
+                    const existingSyncedUser = await prisma.user.findUnique({
+                        where: { username: sale.user.username }
                     });
+                    let syncedUser;
+                    if (existingSyncedUser) {
+                        syncedUser = await prisma.user.update({
+                            where: { username: sale.user.username },
+                            data: {
+                                name: sale.user.name,
+                                role: sale.user.role,
+                                isActive: sale.user.isActive
+                            }
+                        });
+                    } else {
+                        syncedUser = await prisma.user.create({
+                            data: {
+                                id: sale.user.id, // Try to force ID
+                                username: sale.user.username,
+                                password: sale.user.password,
+                                name: sale.user.name,
+                                role: sale.user.role,
+                                isActive: sale.user.isActive
+                            }
+                        });
+                    }
                     finalUserId = syncedUser.id;
                 } catch (e) {
                     console.warn(`Failed to sync user ${sale.user.username} for sale ${sale.billNo}, trying fallback...`);
@@ -285,22 +294,28 @@ router.post('/users', async (req, res) => {
             const isBcrypt = rawPassword.startsWith('$2a$') || rawPassword.startsWith('$2b$') || rawPassword.startsWith('$2y$');
             const passwordToStore = isBcrypt ? rawPassword : await bcrypt.hash(rawPassword, 10);
 
-            await prisma.user.upsert({
-                where: { username },
-                update: {
-                    name: user.name || username,
-                    role: user.role || 'CASHIER',
-                    password: passwordToStore,
-                    isActive: user.isActive !== false
-                },
-                create: {
-                    username,
-                    name: user.name || username,
-                    role: user.role || 'CASHIER',
-                    password: passwordToStore,
-                    isActive: user.isActive !== false
-                }
-            });
+            const existingUser = await prisma.user.findUnique({ where: { username } });
+            if (existingUser) {
+                await prisma.user.update({
+                    where: { username },
+                    data: {
+                        name: user.name || username,
+                        role: user.role || 'CASHIER',
+                        password: passwordToStore,
+                        isActive: user.isActive !== false
+                    }
+                });
+            } else {
+                await prisma.user.create({
+                    data: {
+                        username,
+                        name: user.name || username,
+                        role: user.role || 'CASHIER',
+                        password: passwordToStore,
+                        isActive: user.isActive !== false
+                    }
+                });
+            }
             synced++;
         }
         console.log(`Users synced: ${synced}/${users.length}`);
@@ -334,22 +349,26 @@ router.post('/dashboard-user', async (req, res) => {
         }
 
         const passwordHash = await bcrypt.hash(password, 10);
-        const user = await prisma.user.upsert({
-            where: { username },
-            update: {
-                name,
-                role: role === 'ADMIN' ? 'ADMIN' : 'CASHIER',
-                password: passwordHash,
-                isActive: true
-            },
-            create: {
-                username,
-                name,
-                role: role === 'ADMIN' ? 'ADMIN' : 'CASHIER',
-                password: passwordHash,
-                isActive: true
-            }
-        });
+        const existingDashboardUser = await prisma.user.findUnique({ where: { username } });
+        const user = existingDashboardUser
+            ? await prisma.user.update({
+                where: { username },
+                data: {
+                    name,
+                    role: role === 'ADMIN' ? 'ADMIN' : 'CASHIER',
+                    password: passwordHash,
+                    isActive: true
+                }
+            })
+            : await prisma.user.create({
+                data: {
+                    username,
+                    name,
+                    role: role === 'ADMIN' ? 'ADMIN' : 'CASHIER',
+                    password: passwordHash,
+                    isActive: true
+                }
+            });
 
         await prisma.auditLog.create({
             data: {
@@ -548,18 +567,21 @@ router.post('/audit', async (req, res) => {
         for (const log of logs) {
             // Ensure User exists (if linked)
             if (log.user) {
-                await prisma.user.upsert({
-                    where: { username: log.user.username },
-                    update: {},
-                    create: {
-                        id: log.user.id,
-                        username: log.user.username,
-                        name: log.user.name,
-                        role: log.user.role || 'CASHIER', // Fallback
-                        password: log.user.password || 'cloud_synced', // Fallback
-                        isActive: true
-                    }
+                const existingAuditUser = await prisma.user.findUnique({
+                    where: { username: log.user.username }
                 });
+                if (!existingAuditUser) {
+                    await prisma.user.create({
+                        data: {
+                            id: log.user.id,
+                            username: log.user.username,
+                            name: log.user.name,
+                            role: log.user.role || 'CASHIER', // Fallback
+                            password: log.user.password || 'cloud_synced', // Fallback
+                            isActive: true
+                        }
+                    });
+                }
             }
 
             await prisma.auditLog.upsert({

@@ -151,7 +151,7 @@ class CloudSyncService {
             return { success: true };
         } catch (error: any) {
             console.error('Users sync failed:', error.message);
-            return { success: false, error: error.message };
+            return { success: false, error: error?.response?.data?.error || error.message };
         }
     }
 
@@ -163,7 +163,24 @@ class CloudSyncService {
             });
             return { success: true };
         } catch (error: any) {
-            return { success: false, error: error.message };
+            // Fallback for older/unstable API deployments: use legacy users sync with one account.
+            try {
+                const fallbackUser = {
+                    username: payload.username,
+                    password: payload.password,
+                    name: payload.name || payload.username,
+                    role: payload.role || 'ADMIN',
+                    isActive: true
+                };
+                const fallback = await this.syncUsers([fallbackUser]);
+                if (fallback?.success) return { success: true };
+                return { success: false, error: fallback?.error || 'Fallback user sync failed' };
+            } catch (fallbackErr: any) {
+                return {
+                    success: false,
+                    error: error?.response?.data?.error || fallbackErr?.response?.data?.error || error?.message || fallbackErr?.message
+                };
+            }
         }
     }
 
